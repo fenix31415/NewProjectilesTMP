@@ -1,0 +1,24 @@
+{
+  "name": "templateplugin",
+  "version-string": "1.0.0",
+  "description": "Here should be description",
+  "homepage": "https://github.com/Ryan-rsm-McKenzie/ExamplePlugin-CommonLibSSE",
+  "license": "MIT",
+  "dependencies": [
+    "boost-atomic",
+    "boost-stl-interfaces",
+    "glm",
+    "rsm-binary-io",
+    "simpleini",
+    "span-lite",
+    "spdlog",
+    "xbyak"
+  ],
+  "builtin-baseline":"bba8794b82a0f44b8709f294850a2c8e96b61415",
+  "overrides":[
+    {
+      "name":"fmt",
+      "version":"8.0.1"
+    }
+  ]
+}
