@@ -1,0 +1,36 @@
+{
+  "FormIDs": {
+    "key_kywdMagicDamageFire": "Skyrim.esm|0x1CEAD",
+    "key_kywdMagicDamageFrost": "Skyrim.esm|0x1CEAE"
+  },
+
+  "HomingData": {
+    "key_speed_1": {
+      "type": "ConstSpeed",
+      "rotationTime": 5,
+      "target": "Nearest"
+    },
+    "key_speed_2": {
+      "type": "ConstSpeed",
+      "rotationTime": 1,
+      "target": "Nearest"
+    }
+  },
+
+  "Triggers": [
+    {
+      "condition": "EffectHasKwd",
+      "value": "key_kywdMagicDamageFire",
+      "TriggerFunctions": {
+        "Homing": "key_speed_1"
+      }
+    },
+    {
+      "condition": "EffectHasKwd",
+      "value": "key_kywdMagicDamageFrost",
+      "TriggerFunctions": {
+        "Homing": "key_speed_2"
+      }
+    }
+  ]
+}

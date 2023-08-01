@@ -1,0 +1,19 @@
+{
+  "HomingData": {
+    "key_speed_1": {
+      "type": "ConstSpeed",
+      "rotationTime": 5,
+      "target": "Nearest"
+    }
+  },
+
+  "Triggers": [
+    {
+      "condition": "SpellHasKwd",
+      "value": "HomingProjectiles.esp|0x822",
+      "TriggerFunctions": {
+        "Homing": "key_speed_1"
+      }
+    }
+  ]
+}

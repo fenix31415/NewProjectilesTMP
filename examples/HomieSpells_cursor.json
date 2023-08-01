@@ -1,0 +1,24 @@
+{
+  "FormIDs": {
+    "key_projFireball": "Skyrim.esm|0x10FBED"
+  },
+
+  "HomingData": {
+    "key_cursor": {
+      "type": "ConstSpeed",
+      "rotationTime": 1,
+      "target": "Cursor",
+      "cursorAngle": 10
+    }
+  },
+
+  "Triggers": [
+    {
+      "condition": "BaseIsFormID",
+      "value": "key_projFireball",
+      "TriggerFunctions": {
+        "Homing": "key_cursor"
+      }
+    }
+  ]
+}

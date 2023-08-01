@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NewProjectiles",
+  "description": "Defines NewProjectiles mod config layout",
+  "type": "object",
+  "properties": {
+    "FormIDs": { "$ref": "#/$defs/FormIDsMap" },
+    "HomingData": { "$ref": "#/$defs/HomingData" },
+    "Triggers": { "$ref": "#/$defs/Triggers" }
+  },
+  "additionalProperties": false,
+  "required": ["Triggers"],
+
+  "$defs": {
+    "PluginFormID": {
+      "description": "PluginFormID",
+      "type": "string",
+      "$comment": "MyMod.esp|0x31415",
+      "pattern": "^[^\\\\\\/:*?\"<>|]+\\.es[lmp]\\|(0[Xx])[\\dA-Fa-f]{1,8}$"
+    },
+    "form_key": {
+      "type": "string",
+      "pattern": "^key_[\\w\\d]+"
+    },
+    "FormIDsMap": {
+      "type": "object",
+      "description": "A map string->formID for more convenience",
+      "patternProperties": {
+        "^key_[\\w\\d]+": {
+          "$ref": "#/$defs/FormOrID",
+          "description": "A form to which the key is mapped"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "point3": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "point2": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+
+    "FormOrID": {
+      "oneOf": [
+        { "$ref": "#/$defs/PluginFormID" },
+        { "$ref": "#/$defs/formID" },
+        { "$ref": "#/$defs/form_key" }
+      ]
+    },
+    "formID": {
+      "description": "Form id of xEdit record",
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{1,8}$"
+    },
+
+    "ifAutoAimConstSpeed": {
+      "$comment": "RotationTime for ConstSpeed type",
+      "if": {
+        "properties": {
+          "type": { "const": "ConstSpeed" }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "rotationTime": {
+            "type": "number",
+            "description": "Time needed to rotate at 180 deg (5, 3.5, 2.5 are nice)",
+            "minimum": 0.5,
+            "maximum": 100
+          }
+        },
+        "required": ["rotationTime"]
+      }
+    },
+    "ifAutoAimConstAccel": {
+      "$comment": "Acceleration for ConstAccel type",
+      "if": {
+        "properties": {
+          "type": { "const": "ConstAccel" }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "acceleration": {
+            "type": "integer",
+            "description": "Acceleration length (5, 10, 50 are nice)",
+            "minimum": 1,
+            "maximum": 300
+          }
+        },
+        "required": ["acceleration"]
+      }
+    },
+    "ifAutoAimCursor": {
+      "$comment": "Cursor radius for Cursor type",
+      "if": {
+        "properties": {
+          "target": { "const": "Cursor" }
+        },
+        "required": ["target"]
+      },
+      "then": {
+        "properties": {
+          "cursorAngle": {
+            "type": "integer",
+            "description": "Angle of cone for detecting targets near the cursor (5-15 are nice, 90 is max)",
+            "minimum": 0,
+            "maximum": 90
+          }
+        },
+        "required": ["cursorAngle"]
+      }
+    },
+    "HomingTypes": {
+      "description": "Type of homing trajectories",
+      "enum": ["ConstSpeed", "ConstAccel"]
+    },
+    "HomingTargets": {
+      "description": "How to capture target (Default: Nearest)",
+      "enum": ["Cursor", "Nearest", "Hostile"]
+    },
+    "HomingData": {
+      "description": "Configure homing spells",
+      "type": "object",
+      "patternProperties": {
+        "^0x[0-9a-fA-F]{1,8}$|^(key_)": {
+          "type": "object",
+          "properties": {
+            "type": { "$ref": "#/$defs/HomingTypes" },
+            "target": { "$ref": "#/$defs/HomingTargets" }
+          },
+          "allOf": [
+            { "$ref": "#/$defs/ifAutoAimConstSpeed" },
+            { "$ref": "#/$defs/ifAutoAimConstAccel" },
+            { "$ref": "#/$defs/ifAutoAimCursor" }
+          ],
+
+          "required": ["type"],
+          "unevaluatedProperties": false
+        }
+      },
+
+      "additionalProperties": false
+    },
+
+    "Casters": {
+      "description": "Who can cast homing version of the projectile (Default: Both)",
+      "enum": ["Both", "NPC", "Player"]
+    },
+    "TriggerConditions": {
+      "description": "A condition to evaluate",
+      "enum": ["BaseIsFormID", "EffectHasKwd", "SpellHasKwd", "CasterIsFormID", "CasterBaseIsFormID", "CasterHasKwd"]
+    },
+    "TriggerFunctions": {
+      "description": "A list of functions to set new type",
+      "type": "object",
+      "properties": {
+        "Homing": { "$ref": "#/$defs/form_key" }
+      },
+      "additionalProperties": false
+    },
+    "Trigger": {
+      "description": "A trigger that checks formID of bproj",
+      "type": "object",
+      "properties": {
+        "value": { "$ref": "#/$defs/FormOrID" },
+        "caster": { "$ref": "#/$defs/Casters" },
+        "condition": { "$ref": "#/$defs/TriggerConditions" },
+        "TriggerFunctions": { "$ref": "#/$defs/TriggerFunctions" }
+      },
+      "additionalProperties": false,
+      "required": ["value", "TriggerFunctions", "condition"]
+    },
+    "Triggers": {
+      "description": "Configure triggers that applies new type for proj",
+      "type": "array",
+      "items": { "$ref": "#/$defs/Trigger" },
+      "additionalProperties": false
+    }
+  }
+}

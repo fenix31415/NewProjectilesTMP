@@ -31,7 +31,7 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STR
 # ---- Project ----
 
 project(
-	TemplatePluginSSE
+	NewProjectilesTMP
 	VERSION 1.0.0
 	LANGUAGES CXX
 )
@@ -81,11 +81,21 @@ else ()
 endif ()
 
 find_package(spdlog REQUIRED CONFIG)
+find_package(jsoncpp REQUIRED CONFIG)
 
 # ---- Add source files ----
 
 set(SOURCES
 	src/main.cpp
+	src/Hooks.h
+	src/RuntimeData.h
+	src/RuntimeData.cpp
+	src/JsonUtils.h
+	src/JsonUtils.cpp
+	src/Homing.h
+	src/Homing.cpp
+	src/Triggers.h
+	src/Triggers.cpp
 	src/PCH.h
 )
 
@@ -133,6 +143,7 @@ target_link_libraries(
 	PRIVATE
 		CommonLibSSE::CommonLibSSE
 		spdlog::spdlog
+		JsonCpp::JsonCpp
 )
 
 if (DEFINED UseUselessUtils AND UseUselessUtils)
@@ -201,4 +212,9 @@ target_precompile_headers(
 	${PROJECT_NAME}
 	PRIVATE
 		src/PCH.h
+)
+
+add_custom_command(
+	TARGET ${PROJECT_NAME} POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> "e:/MO2_Data/mods/NewProjectilesTMP/skse/plugins/"
 )

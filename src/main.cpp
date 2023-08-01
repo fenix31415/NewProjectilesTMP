@@ -45,11 +45,97 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 	return true;
 }
 
+#include "Hooks.h"
+#include "json/json.h"
+#include <JsonUtils.h>
+#include "Triggers.h"
+
+void read_json()
+{
+	Json::Value json_root;
+	std::ifstream ifs;
+	ifs.open("Data/HomingProjectiles/HomieSpells.json");
+	ifs >> json_root;
+	ifs.close();
+
+	JsonUtils::FormIDsMap::init(json_root);
+
+	if (json_root.isMember("HomingData")) {
+		Homing::init(json_root["HomingData"]);
+	}
+
+	Triggers::Triggers::init(json_root);
+}
+
+void reset_json()
+{
+	Homing::forget();
+
+	read_json();
+}
+
+class InputHandler : public RE::BSTEventSink<RE::InputEvent*>
+{
+public:
+	static InputHandler* GetSingleton()
+	{
+		static InputHandler singleton;
+		return std::addressof(singleton);
+	}
+
+	RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* e, RE::BSTEventSource<RE::InputEvent*>*) override
+	{
+		if (!*e)
+			return RE::BSEventNotifyControl::kContinue;
+
+		if (auto buttonEvent = (*e)->AsButtonEvent();
+			buttonEvent && buttonEvent->HasIDCode() && (buttonEvent->IsDown() || buttonEvent->IsPressed())) {
+			if (int key = buttonEvent->GetIDCode(); key == 71) {
+				reset_json();
+			}
+		}
+		return RE::BSEventNotifyControl::kContinue;
+	}
+
+	void enable()
+	{
+		if (auto input = RE::BSInputDeviceManager::GetSingleton()) {
+			input->AddEventSink(this);
+		}
+	}
+};
+
+class DebugAPIHook
+{
+public:
+	static void Hook() { _Update = REL::Relocation<uintptr_t>(REL::ID(RE::VTABLE_PlayerCharacter[0])).write_vfunc(0xad, Update); }
+
+private:
+	static void Update(RE::PlayerCharacter* a, float delta)
+	{
+		_Update(a, delta);
+
+		SKSE::GetTaskInterface()->AddUITask([]() { DebugAPI_IMPL::DebugAPI::Update(); });
+	}
+
+	static inline REL::Relocation<decltype(Update)> _Update;
+};
+
 static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 {
 	switch (message->type) {
 	case SKSE::MessagingInterface::kDataLoaded:
-		//
+		PaddingsProjectileHook::Hook();
+		MultipleBeamsHook::Hook();
+		NormLightingsHook::Hook();
+		SetNewTypeHook::Hook();
+		Homing::install();
+		read_json();
+		InputHandler::GetSingleton()->enable();
+
+#ifdef DEBUG
+		DebugAPIHook::Hook();
+#endif  // DEBUG
 
 		break;
 	}

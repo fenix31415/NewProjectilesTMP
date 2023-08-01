@@ -1,0 +1,19 @@
+{
+  "HomingData": {
+    "key_speed_1": {
+      "type": "ConstSpeed",
+      "rotationTime": 5,
+      "target": "Nearest"
+    }
+  },
+
+  "Triggers": [
+    {
+      "condition": "CasterBaseIsFormID",
+      "value": "0x7",
+      "TriggerFunctions": {
+        "Homing": "key_speed_1"
+      }
+    }
+  ]
+}

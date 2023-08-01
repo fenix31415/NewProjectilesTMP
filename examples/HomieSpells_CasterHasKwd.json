@@ -1,0 +1,23 @@
+{
+  "FormIDs": {
+    "key_kywdMagicRestoreHealth": "Skyrim.esm|0x1CEB0"
+  },
+
+  "HomingData": {
+    "key_speed_1": {
+      "type": "ConstSpeed",
+      "rotationTime": 5,
+      "target": "Nearest"
+    }
+  },
+
+  "Triggers": [
+    {
+      "condition": "CasterHasKwd",
+      "value": "key_kywdMagicRestoreHealth",
+      "TriggerFunctions": {
+        "Homing": "key_speed_1"
+      }
+    }
+  ]
+}
