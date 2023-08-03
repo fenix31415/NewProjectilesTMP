@@ -6,7 +6,9 @@
   "properties": {
     "FormIDs": { "$ref": "#/$defs/FormIDsMap" },
     "HomingData": { "$ref": "#/$defs/HomingData" },
-    "Triggers": { "$ref": "#/$defs/Triggers" }
+    "Triggers": { "$ref": "#/$defs/Triggers" },
+    "MulticastSpawnGroups": { "$ref": "#/$defs/MulticastSpawnGroups" },
+    "MulticastData": { "$ref": "#/$defs/MulticastData" }
   },
   "additionalProperties": false,
   "required": ["Triggers"],
@@ -130,7 +132,11 @@
     },
     "HomingTargets": {
       "description": "How to capture target (Default: Nearest)",
-      "enum": ["Cursor", "Nearest", "Hostile"]
+      "enum": ["Cursor", "Nearest"]
+    },
+    "HomingTargetAggressive": {
+      "description": "How aggressive targets to detect (default: Hostile)",
+      "enum": ["Aggressive", "Hostile", "Any"]
     },
     "HomingData": {
       "description": "Configure homing spells",
@@ -140,7 +146,12 @@
           "type": "object",
           "properties": {
             "type": { "$ref": "#/$defs/HomingTypes" },
-            "target": { "$ref": "#/$defs/HomingTargets" }
+            "target": { "$ref": "#/$defs/HomingTargets" },
+            "checkLOS": {
+              "description": "Is it necessary for the caster to see the victim (default: false)",
+              "type": "boolean"
+            },
+            "aggressive": { "$ref": "#/$defs/HomingTargetAggressive" }
           },
           "allOf": [
             { "$ref": "#/$defs/ifAutoAimConstSpeed" },
@@ -157,18 +168,26 @@
     },
 
     "Casters": {
-      "description": "Who can cast homing version of the projectile (Default: Both)",
+      "description": "Who can cast triggered version of the projectile (Default: Both)",
       "enum": ["Both", "NPC", "Player"]
     },
     "TriggerConditions": {
       "description": "A condition to evaluate",
-      "enum": ["BaseIsFormID", "EffectHasKwd", "SpellHasKwd", "CasterIsFormID", "CasterBaseIsFormID", "CasterHasKwd"]
+      "enum": [
+        "BaseIsFormID",
+        "EffectHasKwd",
+        "SpellHasKwd",
+        "CasterIsFormID",
+        "CasterBaseIsFormID",
+        "CasterHasKwd"
+      ]
     },
     "TriggerFunctions": {
       "description": "A list of functions to set new type",
       "type": "object",
       "properties": {
-        "Homing": { "$ref": "#/$defs/form_key" }
+        "Homing": { "$ref": "#/$defs/form_key" },
+        "Multicast": { "$ref": "#/$defs/form_key" }
       },
       "additionalProperties": false
     },
@@ -179,7 +198,11 @@
         "value": { "$ref": "#/$defs/FormOrID" },
         "caster": { "$ref": "#/$defs/Casters" },
         "condition": { "$ref": "#/$defs/TriggerConditions" },
-        "TriggerFunctions": { "$ref": "#/$defs/TriggerFunctions" }
+        "TriggerFunctions": { "$ref": "#/$defs/TriggerFunctions" },
+        "disableOrigin": {
+          "description": "Disable origin projectile (default: false)",
+          "type": "boolean"
+        }
       },
       "additionalProperties": false,
       "required": ["value", "TriggerFunctions", "condition"]
@@ -188,6 +211,196 @@
       "description": "Configure triggers that applies new type for proj",
       "type": "array",
       "items": { "$ref": "#/$defs/Trigger" },
+      "additionalProperties": false
+    },
+
+    "ifSpawnGroupShapeNotSingle": {
+      "$comment": "Size for not Single shape",
+      "if": {
+        "allOf": [
+          {
+            "not": {
+              "properties": {
+                "shape": { "const": "Single" }
+              },
+              "required": ["shape"]
+            }
+          },
+          {
+            "required": ["shape"]
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "size": {
+            "type": "integer",
+            "description": "Shape size (usually 50--200)",
+            "minimum": 1
+          }
+        },
+        "required": ["size"]
+      }
+    },
+    "MulticastSpawnGroups": {
+      "description": "Configure different spawn groups for multicast feature",
+      "type": "object",
+      "patternProperties": {
+        "^0x[0-9a-fA-F]{1,8}$|^(key_)": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "description": "Number of projectiles to spawn (default: 1)",
+              "type": "integer",
+              "minimum": 1
+            },
+            "shape": {
+              "description": "How to position projectiles (default: Single)",
+              "enum": [
+                "Single",
+                "HorizontalLine",
+                "VerticalLine",
+                "Circle",
+                "HalfCircle",
+                "FillSquare",
+                "FillCircle",
+                "Sphere"
+              ]
+            },
+            "rotation": {
+              "description": "How to rotate projectiles (default: Parallel)",
+              "enum": [
+                "Parallel",
+                "ToSight",
+                "ToCenter",
+                "FromCenter",
+                "AutoAim"
+              ]
+            },
+            "sound": {
+              "description": "How many times play sound for a group (default: Single)",
+              "enum": ["Single", "Every", "None"]
+            },
+            "normal": {
+              "$ref": "#/$defs/point3",
+              "description": "Normal of the spawning plane (default: [0,1,0])"
+            },
+            "posOffset": {
+              "$ref": "#/$defs/point3",
+              "description": "Offset from origin center to spawn group center (default: [0,0,0])"
+            },
+            "posRnd": {
+              "$ref": "#/$defs/point3",
+              "description": "Max delta for random origin (default: [0,0,0])"
+            },
+            "rotOffset": {
+              "$ref": "#/$defs/point2",
+              "description": "Offset of spawn group rotation from actual cast rotation (default: [0,0])"
+            },
+            "rotRnd": {
+              "$ref": "#/$defs/point2",
+              "description": "Rnd rotation offset for every individual proj (default: [0,0])"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "normal": true
+                },
+                "required": ["normal"]
+              },
+              "then": {
+                "properties": {
+                  "xDepends": {
+                    "type": "boolean",
+                    "description": "Is normal depends only on left-right or on up-down too"
+                  }
+                }
+              }
+            },
+            { "$ref": "#/$defs/ifSpawnGroupShapeNotSingle" }
+          ],
+          "unevaluatedProperties": false
+        }
+      }
+    },
+
+    "MulticastHomingDetection": {
+      "description": "A way to distribute projectiles into targets (default: Individual)",
+      "enum": ["Individual", "Evenly"]
+    },
+    "MulticastSpell": {
+      "allOf": [
+        { "required": ["spellID"] },
+        { "not": { "required": ["arrowID"] } },
+        { "not": { "required": ["weapID"] } }
+      ],
+      "description": "Data for spell projectile"
+    },
+    "MulticastArrow": {
+      "description": "Data for spell projectile",
+      "allOf": [
+        { "required": ["weapID"] },
+        { "not": { "required": ["spellID"] } }
+      ]
+    },
+    "MulticastData": {
+      "description": "Configure multicast spells",
+      "type": "object",
+      "patternProperties": {
+        "^0x[0-9a-fA-F]{1,8}$|^(key_)": {
+          "type": "array",
+          "description": "A set of multicast groups",
+          "items": {
+            "type": "object",
+            "description": "A spawn group with pattern and additional info",
+            "properties": {
+              "spawn_group": { "$ref": "#/$defs/form_key" },
+              "callTriggers": {
+                "type": "boolean",
+                "description": "Do triggers called on new projectile after spawn (default: false)"
+              },
+              "NewProjsType": {
+                "properties": {
+                  "homing_detection": {
+                    "$ref": "#/$defs/MulticastHomingDetection"
+                  },
+                  "Homing": { "$ref": "#/$defs/form_key" },
+                  "Multicast": { "$ref": "#/$defs/form_key" }
+                }
+              },
+              "arrowID": {
+                "oneOf": [
+                  { "$ref": "#/$defs/FormOrID" },
+                  { "const": "Current" }
+                ],
+                "description": "An arrow to fire"
+              },
+              "weapID": {
+                "oneOf": [
+                  { "$ref": "#/$defs/FormOrID" },
+                  { "const": "Current" }
+                ],
+                "description": "A weap that fires"
+              },
+              "spellID": {
+                "oneOf": [
+                  { "$ref": "#/$defs/FormOrID" },
+                  { "const": "Current" }
+                ],
+                "description": "A spell to cast"
+              }
+            },
+            "oneOf": [
+              { "$ref": "#/$defs/MulticastArrow" },
+              { "$ref": "#/$defs/MulticastSpell" }
+            ],
+            "required": ["spawn_group"],
+            "additionalProperties": false
+          }
+        }
+      },
       "additionalProperties": false
     }
   }

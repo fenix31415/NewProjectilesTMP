@@ -40,6 +40,22 @@ namespace JsonUtils
 			formIDs.insert({ key, get_formid(formids[key].asString()) });
 		}
 	}
+
+	RE::NiPoint3 readOrDefault3(const Json::Value& json_spawnGroup, std::string_view field_name)
+	{
+		if (json_spawnGroup.isMember(field_name.data()))
+			return JsonUtils::get_point(json_spawnGroup[field_name.data()]);
+		else
+			return { 0, 0, 0 };
+	};
+
+	RE::Projectile::ProjectileRot readOrDefault2(const Json::Value& json_spawnGroup, std::string_view field_name)
+	{
+		if (json_spawnGroup.isMember(field_name.data()))
+			return JsonUtils::get_point2(json_spawnGroup[field_name.data()]);
+		else
+			return { 0, 0 };
+	};
 }
 
 

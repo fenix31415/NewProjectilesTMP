@@ -2,36 +2,8 @@
 #include "RuntimeData.h"
 #include "JsonUtils.h"
 
-#ifdef DEBUG
-#include "Triggers.h"
-#endif  // DEBUG
-
 namespace Homing
 {
-	enum class HomingTypes : uint32_t
-	{
-		ConstSpeed,  // Projectile has constant speed
-		ConstAccel   // Projectile has constant rotation time
-	};
-	static constexpr HomingTypes HomingTypes__DEFAULT = HomingTypes::ConstSpeed;
-
-	enum class TargetTypes : uint32_t
-	{
-		Nearest,  // Find nearest target
-		Hostile,  // Find nearest hostile target
-		Cursor    // Find closest to cursor (within radius) target
-	};
-	static constexpr TargetTypes TargetTypes__DEFAULT = TargetTypes::Hostile;
-
-	struct Data
-	{
-		HomingTypes type: 1;
-		TargetTypes target: 2;
-		float detection_angle;  // valid for target == cursor
-		float val1;             // rotation time (ConstSpeed) or acceleration (ConstAccel)
-	};
-	static_assert(sizeof(Data) == 12);
-
 	struct Storage
 	{
 		static void init(const Json::Value& HomingData)
@@ -46,7 +18,6 @@ namespace Homing
 		static void forget() {
 			keys.init();
 			data_static.clear();
-			data_dynamic.clear();
 		}
 
 		static uint32_t get_key_ind(const std::string& key) { return keys.get(key); }
@@ -59,6 +30,8 @@ namespace Homing
 			
 			auto type = parse_enum<HomingTypes__DEFAULT>(item["type"].asString());
 			auto target = parse_enum_ifIsMember<TargetTypes__DEFAULT>(item, "target"sv);
+			bool check_los = parse_enum_ifIsMember<false>(item, "checkLOS"sv);
+			auto aggressive = parse_enum_ifIsMember<AggressiveTypes__DEFAULT>(item, "aggressive"sv);
 
 			float detection_angle = 0.0f;
 			if (target == TargetTypes::Cursor) {
@@ -78,13 +51,15 @@ namespace Homing
 				break;
 			}
 
-			data_static.emplace_back(type, target, detection_angle, val1);
+			data_static.emplace_back(type, target, check_los, aggressive, detection_angle, val1);
 		}
 
 		static inline JsonUtils::KeysMap keys;
 		static inline std::vector<Data> data_static;
-		static inline std::vector<Data> data_dynamic;
 	};
+
+	// used in multicast evenly
+	const Data& get_data(uint32_t ind) { return Storage::get_data(ind); }
 
 	void forget() { Storage::forget(); }
 	uint32_t get_key_ind(const std::string& key) { return Storage::get_key_ind(key); }
@@ -96,6 +71,21 @@ namespace Homing
 
 	namespace Targeting
 	{
+		enum class LineOfSightLocation : std::uint32_t
+		{
+			kNone = 0,
+			kEyes = 1,   // Eye level
+			kHead = 2,   // 85%
+			kTorso = 3,  // 50%
+			kFeet = 4    // 15%
+		};
+		static_assert(sizeof(LineOfSightLocation) == 0x4);
+
+		static LineOfSightLocation IsActorInLineOfSight(RE::Actor* caster, RE::Actor* target, float viewCone = 100)
+		{
+			return _generic_foo_<36752, decltype(IsActorInLineOfSight)>::eval(caster, target, viewCone);
+		}
+
 		RE::NiPoint3 get_victim_pos(RE::Actor* target, float dtime = 0.0f)
 		{
 			RE::NiPoint3 ans, eye_pos;
@@ -112,20 +102,54 @@ namespace Homing
 			auto caster = _caster->As<RE::Actor>();
 			if (!target || !caster)
 				return false;
-
+			//a->IsHostileToActor(RE::PlayerCharacter::GetSingleton())
 			return target->currentCombatTarget.get().get() == caster;
 		}
 
-		RE::TESObjectREFR* find_nearest_target(RE::TESObjectREFR* caster, RE::TESObjectREFR* origin, bool onlyHostile,
+		bool filter_target_base(RE::TESObjectREFR& _refr, RE::TESObjectREFR* caster)
+		{
+			return !_refr.IsDisabled() && !_refr.IsDead() && _refr.GetFormType() == RE::FormType::ActorCharacter &&
+			       _refr.formID != caster->formID;
+		}
+
+		bool filter_target_los(RE::TESObjectREFR& _refr, RE::TESObjectREFR* caster, bool check_los)
+		{
+			return !check_los || !caster->As<RE::Actor>() || !_refr.As<RE::Actor>() ||
+			       IsActorInLineOfSight(caster->As<RE::Actor>(), _refr.As<RE::Actor>()) != LineOfSightLocation::kNone;
+		}
+
+		bool filter_target_aggressive(RE::TESObjectREFR& _refr, RE::TESObjectREFR* caster, AggressiveTypes type)
+		{
+			return type == AggressiveTypes::Any || (type == AggressiveTypes::Aggressive && is_hostile(&_refr, caster)) ||
+			       (type == AggressiveTypes::Hostile && _refr.As<RE::Actor>() && caster->As<RE::Actor>() &&
+					   _refr.As<RE::Actor>()->IsHostileToActor(caster->As<RE::Actor>()));
+		}
+
+		bool filter_target_dist(RE::TESObjectREFR& _refr, const RE::NiPoint3& origin_pos, float within_dist2)
+		{
+			return origin_pos.GetSquaredDistance(_refr.GetPosition()) < within_dist2;
+		}
+
+		bool filter_target(RE::TESObjectREFR& _refr, RE::TESObjectREFR* caster,
+			const RE::NiPoint3& origin_pos, AggressiveTypes type, bool check_los,
 			float within_dist2)
 		{
+			return filter_target_base(_refr, caster) && filter_target_dist(_refr, origin_pos, within_dist2) &&
+			       filter_target_los(_refr, caster, check_los) && filter_target_aggressive(_refr, caster, type);
+		}
+
+		RE::TESObjectREFR* find_nearest_target(RE::TESObjectREFR* caster, RE::TESObjectREFR* origin, const Data& data,
+			float within_dist2)
+		{
+			bool check_los = data.check_LOS;
+			auto hostile_filter = data.hostile_filter;
+
 			float mindist2 = 1.0E15f;
 			RE::TESObjectREFR* refr = nullptr;
 			RE::TES::GetSingleton()->ForEachReference([=, &mindist2, &refr](RE::TESObjectREFR& _refr) {
-				if (!_refr.IsDisabled() && !_refr.IsDead() && _refr.GetFormType() == RE::FormType::ActorCharacter &&
-					_refr.formID != caster->formID && (!onlyHostile || is_hostile(&_refr, caster))) {
+				if (filter_target(_refr, caster, origin->GetPosition(), hostile_filter, check_los, within_dist2)) {
 					float curdist2 = origin->GetPosition().GetSquaredDistance(_refr.GetPosition());
-					if (curdist2 < within_dist2 && curdist2 < mindist2) {
+					if (curdist2 < mindist2) {
 						mindist2 = curdist2;
 						refr = &_refr;
 					}
@@ -137,6 +161,24 @@ namespace Homing
 				return nullptr;
 
 			return refr;
+		}
+
+		std::vector<RE::TESObjectREFR*> get_nearest_targets(RE::TESObjectREFR* caster, const RE::NiPoint3& origin_pos,
+			const Data& data, float within_dist2)
+		{
+			bool check_los = data.check_LOS;
+			auto hostile_filter = data.hostile_filter;
+
+			std::vector<RE::TESObjectREFR*> ans;
+
+			RE::TES::GetSingleton()->ForEachReference([=, &ans](RE::TESObjectREFR& _refr) {
+				if (filter_target(_refr, caster, origin_pos, hostile_filter, check_los, within_dist2)) {
+					ans.push_back(&_refr);
+				}
+				return RE::BSContainer::ForEachResult::kContinue;
+			});
+
+			return ans;
 		}
 
 		namespace Cursor
@@ -164,36 +206,29 @@ namespace Homing
 				return is_anglebetween_less(caster_pos, caster_sight, target_pos, angle);
 			}
 
-			enum class LineOfSightLocation : std::uint32_t
+			bool filter_target_cursor(RE::TESObjectREFR& _refr, RE::Actor* caster, AggressiveTypes type, bool check_los,
+				float angle, float within_dist2)
 			{
-				kNone = 0,
-				kEyes = 1,   // Eye level
-				kHead = 2,   // 85%
-				kTorso = 3,  // 50%
-				kFeet = 4    // 15%
-			};
-			static_assert(sizeof(LineOfSightLocation) == 0x4);
-
-			static LineOfSightLocation IsActorInLineOfSight(RE::Actor* caster, RE::Actor* target, float viewCone = 100)
-			{
-				return _generic_foo_<36752, decltype(IsActorInLineOfSight)>::eval(caster, target, viewCone);
+				auto refr = _refr.As<RE::Actor>();
+				return filter_target(_refr, caster, caster->GetPosition(), type, check_los, within_dist2) && refr &&
+				       is_near_to_cursor(caster, refr, angle);
 			}
 
-			RE::TESObjectREFR* find_cursor_target(RE::TESObjectREFR* _caster, float angle)
+			RE::TESObjectREFR* find_cursor_target(RE::TESObjectREFR* _caster, const Data& data, float within_dist2)
 			{
 				if (!_caster->IsPlayerRef())
 					return nullptr;
 
 				auto caster = _caster->As<RE::Actor>();
-				std::vector<std::pair<RE::Actor*, float>> targets;
+				std::vector<std::pair<RE::TESObjectREFR*, float>> targets;
 
-				RE::TES::GetSingleton()->ForEachReference([caster, &targets, angle](RE::TESObjectREFR& _refr) {
-					if (auto refr = _refr.As<RE::Actor>();
-						refr && !_refr.IsDisabled() && !_refr.IsDead() && _refr.GetFormType() == RE::FormType::ActorCharacter &&
-						_refr.formID != caster->formID && is_near_to_cursor(caster, refr, angle)) {
-						if (IsActorInLineOfSight(caster, refr) != LineOfSightLocation::kNone) {
-							targets.push_back({ refr, caster->GetPosition().GetSquaredDistance(refr->GetPosition()) });
-						}
+				auto angle = data.detection_angle;
+				bool check_los = data.check_LOS;
+				auto hostile_filter = data.hostile_filter;
+
+				RE::TES::GetSingleton()->ForEachReference([=, &targets](RE::TESObjectREFR& _refr) {
+					if (filter_target_cursor(_refr, caster, hostile_filter, check_los, angle, within_dist2)) {
+						targets.push_back({ &_refr, caster->GetPosition().GetSquaredDistance(_refr.GetPosition()) });
 					}
 					return RE::BSContainer::ForEachResult::kContinue;
 				});
@@ -202,14 +237,40 @@ namespace Homing
 					return nullptr;
 
 				return (*std::min_element(targets.begin(), targets.end(),
-							[](const std::pair<RE::Actor*, float>& a, const std::pair<RE::Actor*, float>& b) {
+							[](const std::pair<RE::TESObjectREFR*, float>& a, const std::pair<RE::TESObjectREFR*, float>& b) {
 								return a.second < b.second;
 							}))
 				    .first;
 			}
+
+			std::vector<RE::TESObjectREFR*> get_cursor_targets(RE::TESObjectREFR* _caster, const Data& data, float within_dist2)
+			{
+				std::vector<RE::TESObjectREFR*> ans;
+
+				if (!_caster->IsPlayerRef())
+					return ans;
+
+				auto caster = _caster->As<RE::Actor>();
+
+				auto angle = data.detection_angle;
+				bool check_los = data.check_LOS;
+				auto hostile_filter = data.hostile_filter;
+
+				RE::TES::GetSingleton()->ForEachReference([=, &ans](RE::TESObjectREFR& _refr) {
+					if (filter_target_cursor(_refr, caster, hostile_filter, check_los, angle, within_dist2)) {
+						auto refr = _refr.As<RE::Actor>();
+						if (caster->GetPosition().GetSquaredDistance(refr->GetPosition()) < within_dist2) {
+							ans.push_back(refr);
+						}
+					}
+					return RE::BSContainer::ForEachResult::kContinue;
+				});
+
+				return ans;
+			}
 		}
 
-		RE::Actor* findTarget(RE::TESObjectREFR* origin, TargetTypes target_type, float detection_angle)
+		RE::Actor* findTarget(RE::TESObjectREFR* origin, const Data& data)
 		{
 			auto proj = origin->As<RE::Projectile>();
 
@@ -227,18 +288,19 @@ namespace Homing
 				return caster_npc->currentCombatTarget.get().get();
 			}
 
+			auto target_type = data.target;
+			float within_dist =
+				proj && (proj->IsFlameProjectile() || proj->IsBeamProjectile()) ? proj->range * proj->range : WITHIN_DIST2;
+
 			RE::TESObjectREFR* refr;
 			switch (target_type) {
 			case TargetTypes::Nearest:
-			case TargetTypes::Hostile:
 				{
-					float within_dist =
-						proj && (proj->IsFlameProjectile() || proj->IsBeamProjectile()) ? proj->range * proj->range : 1.0E15f;
-					refr = find_nearest_target(caster, proj ? proj : caster, target_type == TargetTypes::Hostile, within_dist);
+					refr = find_nearest_target(caster, proj ? proj : caster, data, within_dist);
 					break;
 				}
 			case TargetTypes::Cursor:
-				refr = Cursor::find_cursor_target(caster, detection_angle);
+				refr = Cursor::find_cursor_target(caster, data, within_dist);
 				break;
 			default:
 				refr = nullptr;
@@ -401,7 +463,7 @@ namespace Homing
 		{
 			RE::NiPoint3 final_vel;
 			auto& data = Storage::get_data(get_homing_ind(proj));
-			if (auto target = Targeting::findTarget(proj, data.target, data.detection_angle); target && get_shoot_dir(proj, target, dtime, final_vel)) {
+			if (auto target = Targeting::findTarget(proj, data); target && get_shoot_dir(proj, target, dtime, final_vel)) {
 				auto val1 = data.val1;
 				auto type = data.type;
 				switch (type) {
@@ -512,7 +574,7 @@ namespace Homing
 
 					if (auto ind = get_cursor_ind(a)) {
 						const auto& data = Storage::get_data(ind);
-						if (auto target = Targeting::Cursor::find_cursor_target(a, data.detection_angle))
+						if (auto target = Targeting::Cursor::find_cursor_target(a, data, Targeting::WITHIN_DIST2))
 							draw_line0(a->GetPosition(), target->GetPosition());
 					}
 				}
@@ -572,22 +634,6 @@ namespace Homing
 		}
 	}
 
-	auto rot_at(RE::NiPoint3 dir)
-	{
-		RE::Projectile::ProjectileRot rot;
-		auto len = dir.Unitize();
-		if (len == 0) {
-			rot = { 0, 0 };
-		} else {
-			float polar_angle = _generic_foo_<68820, float(RE::NiPoint3 * p)>::eval(&dir);  // SkyrimSE.exe+c51f70
-			rot = { -asin(dir.z), polar_angle };
-		}
-
-		return rot;
-	}
-
-	auto rot_at(const RE::NiPoint3& from, const RE::NiPoint3& to) { return rot_at(to - from); }
-
 	void onCreated(RE::Projectile* proj, uint32_t ind)
 	{
 		auto& data = Storage::get_data(ind);
@@ -600,8 +646,8 @@ namespace Homing
 		}
 
 		if (proj->IsBeamProjectile()) {
-			if (auto target = Targeting::findTarget(proj, data.target, data.detection_angle)) {
-				auto dir = rot_at(proj->GetPosition(), Targeting::get_victim_pos(target));
+			if (auto target = Targeting::findTarget(proj, data)) {
+				auto dir = FenixUtils::rot_at(proj->GetPosition(), Targeting::get_victim_pos(target));
 
 				_generic_foo_<19362, void(RE::TESObjectREFR * refr, float rot_Z)>::eval(proj, dir.z);
 				_generic_foo_<19360, void(RE::TESObjectREFR * refr, float rot_X)>::eval(proj, dir.x);
@@ -609,7 +655,7 @@ namespace Homing
 		}
 
 		if (proj->IsFlameProjectile()) {
-			Targeting::findTarget(proj, data.target, data.detection_angle);
+			Targeting::findTarget(proj, data);
 		}
 	}
 

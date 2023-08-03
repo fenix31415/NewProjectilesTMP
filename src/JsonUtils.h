@@ -4,6 +4,7 @@
 #include <string>
 #include "json/json.h"
 #include "magic_enum.hpp"
+#include "RE/P/Projectile.h"
 
 template <typename T, T def>
 T parse_impl(const std::string& s)
@@ -20,7 +21,12 @@ auto parse_enum(const std::string& s)
 template <auto def>
 static auto parse_enum_ifIsMember(const Json::Value& item, std::string_view field_name)
 {
-	if constexpr (std::is_same<decltype(def), uint32_t>::value) {
+	if constexpr (std::is_same<decltype(def), bool>::value) {
+		if (item.isMember(field_name.data()))
+			return item[field_name.data()].asBool();
+		else
+			return def;
+	} else if constexpr (std::is_same<decltype(def), uint32_t>::value) {
 		if (item.isMember(field_name.data()))
 			return item[field_name.data()].asUInt();
 		else
@@ -77,4 +83,7 @@ namespace JsonUtils
 			return new_key;
 		}
 	};
+
+	RE::NiPoint3 readOrDefault3(const Json::Value& json_spawnGroup, std::string_view field_name);
+	RE::Projectile::ProjectileRot readOrDefault2(const Json::Value& json_spawnGroup, std::string_view field_name);
 }

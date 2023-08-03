@@ -49,6 +49,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 #include "json/json.h"
 #include <JsonUtils.h>
 #include "Triggers.h"
+#include "Multicast.h"
 
 void read_json()
 {
@@ -63,6 +64,7 @@ void read_json()
 	if (json_root.isMember("HomingData")) {
 		Homing::init(json_root["HomingData"]);
 	}
+	Multicast::init(json_root);
 
 	Triggers::Triggers::init(json_root);
 }
@@ -70,6 +72,7 @@ void read_json()
 void reset_json()
 {
 	Homing::forget();
+	Multicast::forget();
 
 	read_json();
 }
@@ -128,8 +131,9 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 		PaddingsProjectileHook::Hook();
 		MultipleBeamsHook::Hook();
 		NormLightingsHook::Hook();
-		SetNewTypeHook::Hook();
+		Triggers::install();
 		Homing::install();
+		Multicast::install();
 		read_json();
 		InputHandler::GetSingleton()->enable();
 

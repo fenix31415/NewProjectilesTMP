@@ -96,6 +96,10 @@ set(SOURCES
 	src/Homing.cpp
 	src/Triggers.h
 	src/Triggers.cpp
+	src/Multicast.h
+	src/Multicast.cpp
+	src/TriggerFunctions.h
+	src/TriggerFunctions.cpp
 	src/PCH.h
 )
 
