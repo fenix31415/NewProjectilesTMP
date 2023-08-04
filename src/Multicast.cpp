@@ -646,8 +646,6 @@ namespace Multicast
 				right_dir = { 1, 0, 0 };
 			RE::NiPoint3 up_dir = right_dir.Cross(cast_dir);
 
-			draw_line(caster->GetPosition(), caster->GetPosition() + cast_dir * 100);
-
 			// Homing::Evenly support
 			std::vector<RE::TESObjectREFR*> targets;
 			if (data.newtypes.homingInd && data.homing_setting == HomingDetectionType::Evenly) {

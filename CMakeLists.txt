@@ -100,6 +100,8 @@ set(SOURCES
 	src/Multicast.cpp
 	src/TriggerFunctions.h
 	src/TriggerFunctions.cpp
+	src/Emitter.h
+	src/Emitter.cpp
 	src/PCH.h
 )
 

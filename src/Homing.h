@@ -1,7 +1,6 @@
 #pragma once
 
 #include "json/json.h"
-#include "Triggers.h"
 
 namespace Homing
 {

@@ -2,6 +2,10 @@
 #include "RuntimeData.h"
 #include "JsonUtils.h"
 
+#ifdef DEBUG
+#include "Triggers.h"
+#endif  // DEBUG
+
 namespace Homing
 {
 	struct Storage
@@ -543,6 +547,7 @@ namespace Homing
 			static inline REL::Relocation<decltype(change_direction)> _Projectile__ApplyGravity;
 		};
 
+#ifdef DEBUG
 		namespace Debug
 		{
 			uint32_t get_cursor_ind(RE::PlayerCharacter* a) {
@@ -632,6 +637,7 @@ namespace Homing
 				static inline REL::Relocation<decltype(Update)> _Update;
 			};
 		}
+#endif  // DEBUG
 	}
 
 	void onCreated(RE::Projectile* proj, uint32_t ind)

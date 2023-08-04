@@ -50,6 +50,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 #include <JsonUtils.h>
 #include "Triggers.h"
 #include "Multicast.h"
+#include "Homing.h"
 
 void read_json()
 {
@@ -128,9 +129,9 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 {
 	switch (message->type) {
 	case SKSE::MessagingInterface::kDataLoaded:
-		PaddingsProjectileHook::Hook();
-		MultipleBeamsHook::Hook();
-		NormLightingsHook::Hook();
+		Hooks::PaddingsProjectileHook::Hook();
+		Hooks::MultipleBeamsHook::Hook();
+		Hooks::NormLightingsHook::Hook();
 		Triggers::install();
 		Homing::install();
 		Multicast::install();
