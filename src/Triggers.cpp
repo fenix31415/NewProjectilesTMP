@@ -7,6 +7,7 @@ namespace Triggers
 		using namespace Hooks;
 
 		ApplyTriggersHook::Hook();
+		ChangeSpeedHook::Hook();
 
 		CancelArrowHook::Hook();
 		CancelSpellHook::Hook();

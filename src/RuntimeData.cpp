@@ -7,16 +7,16 @@ struct FenixProjsRuntimeData
 	struct Indexes
 	{
 		uint32_t homing: 6;
-		uint32_t unused: 26;
+		uint32_t emitter: 6;
+		uint32_t unused: 20;
 	};
 	static_assert(sizeof(Indexes) == 4);
 
-	void set_homing_ind(uint32_t ind) {
-		data.homing = ind;
-	}
-	uint32_t get_homing_ind() {
-		return data.homing;
-	}
+	void set_homing_ind(uint32_t ind) { data.homing = ind; }
+	uint32_t get_homing_ind() { return data.homing; }
+
+	void set_emitter_ind(uint32_t ind) { data.emitter = ind; }
+	uint32_t get_emitter_ind() { return data.emitter; }
 
 	Indexes data;
 };
@@ -28,6 +28,9 @@ void init_NormalType(RE::Projectile* proj) { get_runtime_data(proj).set_NormalTy
 
 void set_homing_ind(RE::Projectile* proj, uint32_t ind) { get_runtime_data(proj).set_homing_ind(ind); }
 uint32_t get_homing_ind(RE::Projectile* proj) { return get_runtime_data(proj).get_homing_ind(); }
+
+void set_emitter_ind(RE::Projectile* proj, uint32_t ind) { get_runtime_data(proj).set_emitter_ind(ind); }
+uint32_t get_emitter_ind(RE::Projectile* proj) { return get_runtime_data(proj).get_emitter_ind(); }
 
 bool allows_multiple_beams(RE::Projectile* proj)
 {

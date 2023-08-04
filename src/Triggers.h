@@ -24,6 +24,8 @@ namespace Triggers
 		CasterIsFormID,
 		CasterBaseIsFormID,
 		CasterHasKwd,
+		WeaponBaseIsFormID,
+		WeaponHasKwd,
 
 		Total
 	};
@@ -31,10 +33,7 @@ namespace Triggers
 	static const std::array<std::function<bool(RE::Projectile*, uint32_t)>, static_cast<size_t>(TriggerConditions::Total)>
 		ConditionsFunctors = {
 			// BaseIsFormID
-			[](RE::Projectile* proj, uint32_t value) -> bool {
-				auto base = proj->GetProjectileBase();
-				return base->formID == value;
-			},
+			[](RE::Projectile* proj, uint32_t value) -> bool { return proj->GetProjectileBase()->formID == value; },
 			// EffectHasKwd
 			[](RE::Projectile* proj, uint32_t value) -> bool {
 				if (auto spel = proj->spell) {
@@ -74,6 +73,14 @@ namespace Triggers
 					}
 				}
 				return false;
+			},
+			// WeaponBaseIsFormID
+			[](RE::Projectile* proj, uint32_t value) -> bool {
+				return proj->weaponSource && proj->weaponSource->formID == value;
+			},
+			// WeaponHasKwd
+			[](RE::Projectile* proj, uint32_t value) -> bool {
+				return proj->weaponSource && proj->weaponSource->HasKeywordID(value);
 			}
 		};
 
@@ -167,6 +174,8 @@ namespace Triggers
 
 		void eval_function(RE::Projectile* proj) const { functions.eval(proj); }
 
+		void eval_function3dLoaded(RE::Projectile* proj) const { functions.eval3dLoaded(proj); }
+
 	public:
 		Trigger(CasterTypes caster_type, TriggerConditions condition, bool disable_origin, uint32_t value,
 			TriggerFunctions::Functions functions) :
@@ -178,6 +187,12 @@ namespace Triggers
 		{
 			if (eval_condition(proj))
 				eval_function(proj);
+		}
+
+		void eval3dLoaded(RE::Projectile* proj) const
+		{
+			if (eval_condition(proj))
+				eval_function3dLoaded(proj);
 		}
 
 		void eval(Ldata* ldata) const
@@ -195,15 +210,14 @@ namespace Triggers
 				return 0;
 
 			if (bproj->formID == value)
-				if (functions.homingInd)
-					return functions.homingInd;
+				return functions.get_homing_ind();
 
 			return 0;
 		}
 #endif  // DEBUG
 
 	};
-	static_assert(sizeof(Trigger) == 0x10);
+	static_assert(sizeof(Trigger) == 0x24);
 
 	class Triggers
 	{
@@ -224,8 +238,8 @@ namespace Triggers
 				uint32_t value = JsonUtils::get_formid(trigger["value"].asString());
 				bool disable_origin = parse_enum_ifIsMember<false>(trigger, "disableOrigin"sv);
 
-				triggers.emplace_back(caster, condition, disable_origin, value,
-					TriggerFunctions::parse_functions(trigger["TriggerFunctions"]));
+				TriggerFunctions::Functions functions(trigger["TriggerFunctions"]);
+				triggers.emplace_back(caster, condition, disable_origin, value, functions);
 			}
 		}
 
@@ -233,6 +247,13 @@ namespace Triggers
 		{
 			for (const auto& trigger : triggers) {
 				trigger.eval(proj);
+			}
+		}
+
+		static void on3dLoaded(RE::Projectile* proj)
+		{
+			for (const auto& trigger : triggers) {
+				trigger.eval3dLoaded(proj);
 			}
 		}
 
@@ -388,6 +409,24 @@ namespace Triggers
 			static inline REL::Relocation<decltype(Launch)> _Launch;
 		};
 
+		class ChangeSpeedHook
+		{
+		public:
+			static void Hook()
+			{
+				_CalcVelocityVector = SKSE::GetTrampoline().write_call<5>(REL::ID(43030).address() + 0x3b8,
+					CalcVelocityVector);  // SkyrimSE.exe+754bd8
+			}
+
+		private:
+			static void CalcVelocityVector(RE::Projectile* proj)
+			{
+				_CalcVelocityVector(proj);
+				Triggers::on3dLoaded(proj);
+			}
+
+			static inline REL::Relocation<decltype(CalcVelocityVector)> _CalcVelocityVector;
+		};
 	}
 
 	void install();

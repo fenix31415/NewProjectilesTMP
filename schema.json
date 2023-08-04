@@ -8,7 +8,8 @@
     "HomingData": { "$ref": "#/$defs/HomingData" },
     "Triggers": { "$ref": "#/$defs/Triggers" },
     "MulticastSpawnGroups": { "$ref": "#/$defs/MulticastSpawnGroups" },
-    "MulticastData": { "$ref": "#/$defs/MulticastData" }
+    "MulticastData": { "$ref": "#/$defs/MulticastData" },
+    "EmittersData": { "$ref": "#/$defs/EmittersData" }
   },
   "additionalProperties": false,
   "required": ["Triggers"],
@@ -163,7 +164,6 @@
           "unevaluatedProperties": false
         }
       },
-
       "additionalProperties": false
     },
 
@@ -182,12 +182,30 @@
         "CasterHasKwd"
       ]
     },
+    "TriggerNumberFunctionsData": {
+      "type": "object",
+      "description": "Change given variable using given value",
+      "properties": {
+        "type": {
+          "enum": ["Set", "Add", "Mul"],
+          "description": "How to change the value"
+        },
+        "value": {
+          "type": "number",
+          "description": "An argument of function"
+        }
+      },
+      "required": ["type", "value"]
+    },
     "TriggerFunctions": {
       "description": "A list of functions to set new type",
       "type": "object",
       "properties": {
         "Homing": { "$ref": "#/$defs/form_key" },
-        "Multicast": { "$ref": "#/$defs/form_key" }
+        "Multicast": { "$ref": "#/$defs/form_key" },
+        "Emitters": { "$ref": "#/$defs/form_key" },
+        "Speed": { "$ref": "#/$defs/TriggerNumberFunctionsData" },
+        "Range": { "$ref": "#/$defs/TriggerNumberFunctionsData" }
       },
       "additionalProperties": false
     },
@@ -195,7 +213,7 @@
       "description": "A trigger that checks formID of bproj",
       "type": "object",
       "properties": {
-        "value": { "$ref": "#/$defs/FormOrID" },
+        "value": { "$ref": "#/$defs/FormOrID", "description": "An argument of condition function" },
         "caster": { "$ref": "#/$defs/Casters" },
         "condition": { "$ref": "#/$defs/TriggerConditions" },
         "TriggerFunctions": { "$ref": "#/$defs/TriggerFunctions" },
@@ -322,7 +340,8 @@
             { "$ref": "#/$defs/ifSpawnGroupShapeNotSingle" }
           ],
           "unevaluatedProperties": false
-        }
+        },
+        "additionalProperties": false
       }
     },
 
@@ -367,8 +386,12 @@
                     "$ref": "#/$defs/MulticastHomingDetection"
                   },
                   "Homing": { "$ref": "#/$defs/form_key" },
-                  "Multicast": { "$ref": "#/$defs/form_key" }
-                }
+                  "Multicast": { "$ref": "#/$defs/form_key" },
+                  "Emitters": { "$ref": "#/$defs/form_key" },
+                  "Speed": { "$ref": "#/$defs/TriggerNumberFunctionsData" },
+                  "Range": { "$ref": "#/$defs/TriggerNumberFunctionsData" }
+                },
+                "additionalProperties": false
               },
               "arrowID": {
                 "oneOf": [
@@ -399,6 +422,68 @@
             "required": ["spawn_group"],
             "additionalProperties": false
           }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "ifEmitterNewProjType": {
+      "$comment": "NewProjsType field for emitter",
+      "if": {
+        "properties": {
+          "type": { "const": "NewProjType" }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "NewProjsType": { "$ref": "#/$defs/TriggerFunctions" }
+        },
+        "required": ["NewProjsType"]
+      }
+    },
+    "ifEmitterAccelerateToMaxSpeed": {
+      "$comment": "time field for emitter",
+      "if": {
+        "properties": {
+          "type": { "const": "AccelerateToMaxSpeed" }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "time": {
+            "type": "number",
+            "minimum": 0,
+            "description": "A time to accelerate to max speed"
+          }
+        },
+        "required": ["time"]
+      }
+    },
+    "EmittersData": {
+      "description": "Configure emitters spells",
+      "type": "object",
+      "patternProperties": {
+        "^0x[0-9a-fA-F]{1,8}$|^(key_)": {
+          "type": "object",
+          "description": "An instance of emitter settings",
+          "properties": {
+            "interval": {
+              "type": "number",
+              "minimum": 0
+            },
+            "type": {
+              "enum": ["NewProjType", "AccelerateToMaxSpeed"],
+              "description": "A function to call"
+            }
+          },
+          "allOf": [
+            { "$ref": "#/$defs/ifEmitterNewProjType" },
+            { "$ref": "#/$defs/ifEmitterAccelerateToMaxSpeed" }
+          ],
+          "required": [ "interval", "type" ],
+          "unevaluatedProperties": false
         }
       },
       "additionalProperties": false

@@ -17,9 +17,17 @@ namespace Homing
 			}
 		}
 
+		static void init_keys(const Json::Value& HomingData)
+		{
+			for (auto& key : HomingData.getMemberNames()) {
+				read_json_entry_keys(key, HomingData[key]);
+			}
+		}
+
 		static const auto& get_data(uint32_t ind) { return data_static[ind - 1]; }
 
-		static void forget() {
+		static void forget()
+		{
 			keys.init();
 			data_static.clear();
 		}
@@ -29,9 +37,9 @@ namespace Homing
 	private:
 		static void read_json_entry(const std::string& key, const Json::Value& item)
 		{
-			uint32_t ind = keys.add(key);
+			uint32_t ind = keys.get(key);
 			assert(ind == data_static.size() + 1);
-			
+
 			auto type = parse_enum<HomingTypes__DEFAULT>(item["type"].asString());
 			auto target = parse_enum_ifIsMember<TargetTypes__DEFAULT>(item, "target"sv);
 			bool check_los = parse_enum_ifIsMember<false>(item, "checkLOS"sv);
@@ -56,6 +64,10 @@ namespace Homing
 			}
 
 			data_static.emplace_back(type, target, check_los, aggressive, detection_angle, val1);
+		}
+
+		static void read_json_entry_keys(const std::string& key, const Json::Value&) {
+			keys.add(key);
 		}
 
 		static inline JsonUtils::KeysMap keys;
@@ -134,9 +146,8 @@ namespace Homing
 			return origin_pos.GetSquaredDistance(_refr.GetPosition()) < within_dist2;
 		}
 
-		bool filter_target(RE::TESObjectREFR& _refr, RE::TESObjectREFR* caster,
-			const RE::NiPoint3& origin_pos, AggressiveTypes type, bool check_los,
-			float within_dist2)
+		bool filter_target(RE::TESObjectREFR& _refr, RE::TESObjectREFR* caster, const RE::NiPoint3& origin_pos,
+			AggressiveTypes type, bool check_los, float within_dist2)
 		{
 			return filter_target_base(_refr, caster) && filter_target_dist(_refr, origin_pos, within_dist2) &&
 			       filter_target_los(_refr, caster, check_los) && filter_target_aggressive(_refr, caster, type);
@@ -324,7 +335,7 @@ namespace Homing
 		}
 
 	}
-	
+
 	namespace Moving
 	{
 		// SkyrimSE.exe+74DC20
@@ -550,7 +561,8 @@ namespace Homing
 #ifdef DEBUG
 		namespace Debug
 		{
-			uint32_t get_cursor_ind(RE::PlayerCharacter* a) {
+			uint32_t get_cursor_ind(RE::PlayerCharacter* a)
+			{
 				if (auto obj = a->GetEquippedObject(false))
 					if (auto spel = obj->As<RE::SpellItem>())
 						if (auto mgef = FenixUtils::getAVEffectSetting(spel))
@@ -559,7 +571,7 @@ namespace Homing
 								if (data.target == TargetTypes::Cursor)
 									return ind;
 							}
-				
+
 				return 0;
 			}
 
@@ -642,15 +654,18 @@ namespace Homing
 
 	void onCreated(RE::Projectile* proj, uint32_t ind)
 	{
-		auto& data = Storage::get_data(ind);
 		auto caster = proj->shooter.get().get();
 		if (!caster)
 			return;
 
 		if (proj->IsMissileProjectile()) {
-			set_homing_ind(proj, ind);
+			set_homing_ind(proj, ind == static_cast<uint32_t>(-1) ? 0 : ind);
 		}
 
+		if (ind == static_cast<uint32_t>(-1))
+			return;
+
+		auto& data = Storage::get_data(ind);
 		if (proj->IsBeamProjectile()) {
 			if (auto target = Targeting::findTarget(proj, data)) {
 				auto dir = FenixUtils::rot_at(proj->GetPosition(), Targeting::get_victim_pos(target));
@@ -678,5 +693,17 @@ namespace Homing
 #endif
 	}
 
-	void init(const Json::Value& HomingData) { Storage::init(HomingData); }
+	void init(const Json::Value& json_root)
+	{
+		if (json_root.isMember("HomingData")) {
+			Storage::init(json_root["HomingData"]);
+		}
+	}
+
+	void init_keys(const Json::Value& json_root)
+	{
+		if (json_root.isMember("HomingData")) {
+			Storage::init_keys(json_root["HomingData"]);
+		}
+	}
 }

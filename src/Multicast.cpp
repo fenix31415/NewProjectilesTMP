@@ -69,6 +69,13 @@ namespace Multicast
 			}
 		}
 
+		static void init_keys(const Json::Value& SpawnGroups)
+		{
+			for (auto& key : SpawnGroups.getMemberNames()) {
+				read_json_entry_keys(key, SpawnGroups[key]);
+			}
+		}
+
 		static const auto& get_data(uint32_t ind) { return data[ind - 1]; }
 
 		static void forget()
@@ -82,7 +89,7 @@ namespace Multicast
 	private:
 		static void read_json_entry(const std::string& key, const Json::Value& item)
 		{
-			uint32_t ind = keys.add(key);
+			uint32_t ind = keys.get(key);
 			assert(ind == data.size() + 1);
 
 			SpawnGroupData new_data;
@@ -104,6 +111,10 @@ namespace Multicast
 			new_data.rot_rnd = JsonUtils::readOrDefault2(item, "rotRnd"sv);
 
 			data.push_back(new_data);
+		}
+
+		static void read_json_entry_keys(const std::string& key, const Json::Value&) {
+			keys.add(key);
 		}
 
 		static inline JsonUtils::KeysMap keys;
@@ -168,6 +179,13 @@ namespace Multicast
 			}
 		}
 
+		static void init_keys(const Json::Value& MulticastData)
+		{
+			for (auto& key : MulticastData.getMemberNames()) {
+				read_json_entry_keys(key, MulticastData[key]);
+			}
+		}
+
 		static const auto& get_data(uint32_t ind) { return data[ind - 1]; }
 
 		static void forget()
@@ -181,7 +199,7 @@ namespace Multicast
 	private:
 		static void read_json_entry(const std::string& key, const Json::Value& item)
 		{
-			uint32_t ind = keys.add(key);
+			uint32_t ind = keys.get(key);
 			assert(ind == data.size() + 1);
 
 			data.push_back(std::vector<Data>());
@@ -190,6 +208,10 @@ namespace Multicast
 			for (int i = 0; i < (int)item.size(); i++) {
 				read_json_entry_item(new_data, item[i]);
 			}
+		}
+
+		static void read_json_entry_keys(const std::string& key, const Json::Value&) {
+			keys.add(key);
 		}
 
 		static void read_json_entry_item(std::vector<Data>& new_data, const Json::Value& item)
@@ -215,11 +237,11 @@ namespace Multicast
 				assert(false);
 			}
 
-			TriggerFunctions::Functions newtypes = { 0 };
+			TriggerFunctions::Functions newtypes;
 			HomingDetectionType homing_detection;
 			if (item.isMember("NewProjsType")) {
-				newtypes = TriggerFunctions::parse_functions(item["NewProjsType"]);
-				if (newtypes.homingInd)
+				newtypes = TriggerFunctions::Functions(item["NewProjsType"]);
+				if (newtypes.has_homing())
 					homing_detection =
 						parse_enum_ifIsMember<HomingDetectionType__DEFAULT>(item["NewProjsType"], "homing_detection"sv);
 			}
@@ -262,16 +284,18 @@ namespace Multicast
 		{
 			if (auto root = caster->Get3D2()) {
 				RE::BSSoundHandle shandle;
-				RE::BGSSoundDescriptorForm* sndr = nullptr;
 				auto sid = RE::MagicSystem::SoundID::kRelease;
 				if (auto eff = FenixUtils::getAVEffectSetting(spel)) {
-					sndr = EffectSetting__get_sndr(eff, sid);
-				}
-				RE::BSAudioManager::GetSingleton()->BuildSoundDataFromDescriptor(shandle, sndr, 0);
-				PlaySound_func3_140BEDB10(&shandle, root);
+					if (auto sndr = EffectSetting__get_sndr(eff, sid)) {
+						RE::BSAudioManager::GetSingleton()->BuildSoundDataFromDescriptor(shandle, sndr, 0);
+						if (shandle.IsValid()) {
+							PlaySound_func3_140BEDB10(&shandle, root);
 
-				set_sound_position(&shandle, start_pos.x, start_pos.y, start_pos.z);
-				shandle.Play();
+							set_sound_position(&shandle, start_pos.x, start_pos.y, start_pos.z);
+							shandle.Play();
+						}
+					}
+				}
 			}
 		}
 	}
@@ -648,8 +672,9 @@ namespace Multicast
 
 			// Homing::Evenly support
 			std::vector<RE::TESObjectREFR*> targets;
-			if (data.newtypes.homingInd && data.homing_setting == HomingDetectionType::Evenly) {
-				auto& homing_data = Homing::get_data(data.newtypes.homingInd);
+			if (auto homingInd = data.newtypes.get_homing_ind();
+				homingInd && data.homing_setting == HomingDetectionType::Evenly) {
+				auto& homing_data = Homing::get_data(homingInd);
 				targets = homing_data.target == Homing::TargetTypes::Cursor ?
 				              Homing::Targeting::Cursor::get_cursor_targets(caster, homing_data) :
 				              Homing::Targeting::get_nearest_targets(caster, SP_CD.start_pos, homing_data);
@@ -730,5 +755,13 @@ namespace Multicast
 		}
 	}
 
-	// TODO: cancel initial proj
+	void init_keys(const Json::Value& json_root)
+	{
+		if (json_root.isMember("MulticastSpawnGroups")) {
+			SpawnGroupStorage::init_keys(json_root["MulticastSpawnGroups"]);
+		}
+		if (json_root.isMember("MulticastData")) {
+			Storage::init_keys(json_root["MulticastData"]);
+		}
+	}
 }
