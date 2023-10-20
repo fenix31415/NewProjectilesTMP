@@ -1,0 +1,53 @@
+{
+  "FormIDs": {
+    "key_projFireball": "Skyrim.esm|0x10FBED"
+  },
+
+  "HomingData": {
+    "key_H_R": {
+      "type": "ConstSpeed",
+      "rotationTime": 1
+    },
+    "key_H_L": {
+      "type": "ConstAccel",
+      "acceleration": 100,
+      "target": "Cursor",
+      "cursorAngle": 10
+    }
+  },
+
+  "Triggers": [
+    {
+      "event": "ProjAppeared",
+      "conditions": {
+        "Hand": "Right",
+        "CasterIsFormID": "0x14",
+        "ProjBaseIsFormID": "key_projFireball"
+      },
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "SetHoming",
+            "id": "key_H_R"
+          }
+        ]
+      }
+    },
+    {
+      "event": "ProjAppeared",
+      "conditions": {
+        "Hand": "Left",
+        "CasterIsFormID": "0x14",
+        "ProjBaseIsFormID": "key_projFireball"
+      },
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "SetHoming",
+            "id": "key_H_L"
+          }
+        ]
+      }
+    }
+  ]
+}

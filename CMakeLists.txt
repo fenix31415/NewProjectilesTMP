@@ -75,9 +75,9 @@ endif ()
 # ---- Dependencies ----
 
 if (DEFINED UseUselessUtils AND UseUselessUtils)
-	add_subdirectory($ENV{UselessFenixUtils} ./UselessFenixUtils/build)
+	add_subdirectory($ENV{UselessFenixUtils} ./UselessFenixUtils)
 else ()
-	add_subdirectory($ENV{CommonLibSSE} ./CommonLibSSE/build)
+	add_subdirectory($ENV{CommonLibSSE} ./CommonLibSSE)
 endif ()
 
 find_package(spdlog REQUIRED CONFIG)
@@ -102,6 +102,10 @@ set(SOURCES
 	src/TriggerFunctions.cpp
 	src/Emitters.h
 	src/Emitters.cpp
+	src/Followers.h
+	src/Followers.cpp
+	src/Positioning.h
+	src/Positioning.cpp
 	src/PCH.h
 )
 

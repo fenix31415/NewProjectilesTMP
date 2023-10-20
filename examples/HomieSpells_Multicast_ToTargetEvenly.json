@@ -1,0 +1,60 @@
+{
+  "FormIDs": {
+    "key_spellIceSpike": "Skyrim.esm|0x2B96C",
+    "key_projFireball": "Skyrim.esm|0x10FBED"
+  },
+
+  "HomingData": {
+    "key_H_1": {
+      "type": "ConstSpeed",
+      "rotationTime": 1,
+      "aggressive": "Any"
+    }
+  },
+
+  "MulticastSpawnGroups": {
+    "key_SG_1": {
+      "Pattern": {
+        "Figure": {
+          "shape": "Sphere",
+          "count": 50,
+          "size": 300
+        },
+        "normal": [0,0,1],
+        "xDepends": false,
+        "posOffset": [0,0,500]
+      },
+      "rotation": "ToTarget",
+      "rotationTarget": "key_H_1",
+      "rotRnd": [3,3]
+    }
+  },
+
+  "MulticastData": {
+    "key_MC_1": [
+      {
+        "spawn_group": "key_SG_1",
+        "spellID": "key_spellIceSpike",
+        "HomingDetection": "Evenly"
+      }
+    ]
+  },
+
+  "Triggers": [
+    {
+      "event": "ProjAppeared",
+      "conditions": {
+        "ProjBaseIsFormID": "key_projFireball"
+      },
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "ApplyMultiCast",
+            "id": "key_MC_1"
+          }
+        ],
+        "disableOrigin": true
+      }
+    }
+  ]
+}

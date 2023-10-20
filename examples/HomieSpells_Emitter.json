@@ -1,0 +1,65 @@
+{
+  "FormIDs": {
+    "key_projFireball": "Skyrim.esm|0x10FBED"
+  },
+
+  "MulticastSpawnGroups": {
+    "key_SG_1": {
+      "Pattern": {
+        "Figure": {
+          "shape": "Single",
+          "count": 1
+        },
+        "normal": [0,1,0],
+        "xDepends": false
+      },
+      "rotOffset": [90,0],
+      "rotRnd": [10,10]
+    }
+  },
+
+  "MulticastData": {
+    "key_MC_1": [
+      {
+        "spellID": "Current",
+        "spawn_group": "key_SG_1"
+      }
+    ]
+  },
+
+  "EmittersData": {
+    "key_EM_1": {
+      "interval": 0.2,
+      "functions": [
+        {
+          "type": "TriggerFunctions",
+          "TriggerFunctions": {
+            "functions": [
+              {
+                "type": "ApplyMultiCast",
+                "id": "key_MC_1"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+
+  "Triggers": [
+    {
+      "event": "ProjAppeared",
+      "conditions": {
+        "ProjBaseIsFormID": "key_projFireball"
+      },
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "SetEmitter",
+            "id": "key_EM_1"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -41,6 +41,9 @@ static auto parse_enum_ifIsMember(const Json::Value& item, std::string_view fiel
 
 namespace JsonUtils
 {
+	RE::NiPoint3 get_point(const Json::Value& point);
+	RE::Projectile::ProjectileRot get_point2(const Json::Value& point);
+
 	uint32_t get_formid(const std::string& name);
 
 	class FormIDsMap
@@ -54,7 +57,8 @@ namespace JsonUtils
 		static auto get(std::string key)
 		{
 			auto found = formIDs.find(key);
-			return found == formIDs.end() ? 0 : (*found).second;
+			assert(found != formIDs.end());
+			return found->second;
 		}
 	};
 	

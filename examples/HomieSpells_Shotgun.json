@@ -1,0 +1,97 @@
+{
+  "FormIDs": {
+    "key_spellFireball": "Skyrim.esm|0x1C789",
+    "key_spellEmpty": "Skyrim.esm|0xE40CF",
+    "key_projFireball": "Skyrim.esm|0x10FBED"
+  },
+
+  "FollowersData": {
+    "key_F_1": {
+      "Pattern": {
+        "Figure": {
+          "count": 1,
+          "shape": "Single"
+        },
+        "origin": "NPC R MagicNode [RMag]"
+      },
+      "speed": 0
+    }
+  },
+
+  "EmittersData": {
+    "key_EM_1": {
+      "count": 4,
+      "limited": true,
+      "destroyAfter": true,
+      "interval": 0.1,
+      "functions": [
+        {
+          "type": "TriggerFunctions",
+          "TriggerFunctions": {
+            "functions": [
+              {
+                "type": "ApplyMultiCast",
+                "id": "key_MC_2"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+
+  "MulticastSpawnGroups": {
+    "key_SG_1": {
+      "Pattern": {
+        "Figure": {
+          "shape": "Single",
+          "count": 1
+        }
+      }
+    }
+  },
+
+  "MulticastData": {
+    "key_MC_1": [
+      {
+        "spellID": "key_spellEmpty",
+        "spawn_group": "key_SG_1",
+        "TriggerFunctions": {
+          "functions": [
+            {
+              "type": "SetFollower",
+              "id": "key_F_1"
+            },
+            {
+              "type": "SetEmitter",
+              "id": "key_EM_1"
+            }
+          ]
+        }
+      }
+    ],
+    "key_MC_2": [
+      {
+        "spellID": "key_spellFireball",
+        "spawn_group": "key_SG_1"
+      }
+    ]
+  },
+
+  "Triggers": [
+    {
+      "event": "ProjAppeared",
+      "conditions": {
+        "ProjBaseIsFormID": "key_projFireball"
+      },
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "ApplyMultiCast",
+            "id": "key_MC_1"
+          }
+        ]
+      }
+    }
+  ]
+}

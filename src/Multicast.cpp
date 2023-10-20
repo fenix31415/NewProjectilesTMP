@@ -2,26 +2,14 @@
 #include "TriggerFunctions.h"
 #include "Triggers.h"
 #include "Homing.h"
+#include "Positioning.h"
+#include <random>
 
 namespace Multicast
 {
 	using ProjectileRot = RE::Projectile::ProjectileRot;
 
-	// Given a pane and center position. Determine SP initial start position.
-	enum class Shape : uint32_t
-	{
-		Single,
-		HorizontalLine,
-		VerticalLine,
-		Circle,
-		HalfCircle,
-		FillSquare,
-		FillCircle,
-		Sphere,
-
-		Total
-	};
-	static constexpr Shape Shape__DEFAULT = Shape::Single;
+	using Positioning::Shape;
 
 	// Projectiles already placed to cast. Determine SP initial direction.
 	enum class LaunchDir : uint32_t
@@ -29,9 +17,11 @@ namespace Multicast
 		Parallel,
 		ToSight,
 		ToCenter,
-		FromCenter
+		FromCenter,
+
+		// TODO: implement
+		ToTarget
 	};
-	static constexpr LaunchDir LaunchDir__DEFAULT = LaunchDir::Parallel;
 
 	enum class SoundType : uint32_t
 	{
@@ -39,31 +29,36 @@ namespace Multicast
 		Single,
 		None
 	};
-	static constexpr SoundType SoundType__DEFAULT = SoundType::Single;
 
 	// A blueprint for setting projectiles
 	struct SpawnGroupData
 	{
-		uint32_t count: 8;
-		Shape shape: 4;
-		uint32_t size: 14;  // size of a shape, if shape is not Single
-		LaunchDir rot: 3;
-		SoundType sound: 2;
-		uint32_t normalDependsX: 1;  // used for armageddon
+		Positioning::Pattern pattern;  // 00
 
-		RE::NiPoint3 normal;       // 04  determines a pane of SP
-		RE::NiPoint3 pos_offset;   // 10  offset of SP center from actual cast pos
-		RE::NiPoint3 pos_rnd;      // 1C  rnd offset for every individual proj
-		ProjectileRot rot_offset;  // 28  offset of SP rotation from actual cast rotation
-		ProjectileRot rot_rnd;     // 30  rnd rotation offset for every individual proj
+		// "NPC R UpperArm [RUar]" and "NPC L UpperArm [LUar]" is cool yeah.
+		RE::NiPoint3 pos_rnd;      // 30 rnd offset for every individual proj
+		ProjectileRot rot_offset;  // 3C offset of SP rotation from actual cast rotation
+		ProjectileRot rot_rnd;     // 44 rnd rotation offset for every individual proj
+
+		LaunchDir rot: 3;              // 48:00
+		SoundType sound: 2;            // 48:03
+		uint32_t rotation_target: 27;  // 48:05 used if rotation == ToTarget
+
+		SpawnGroupData(const Json::Value& item) :
+			pattern(item["Pattern"]), rot(parse_enum_ifIsMember<LaunchDir::Parallel>(item, "rotation")),
+			sound(parse_enum_ifIsMember<SoundType::Single>(item, "sound")), pos_rnd(JsonUtils::readOrDefault3(item, "posRnd"sv)),
+			rot_offset(JsonUtils::readOrDefault2(item, "rotOffset"sv)), rot_rnd(JsonUtils::readOrDefault2(item, "rotRnd"sv)),
+			rotation_target(rot == LaunchDir::ToTarget ? Homing::get_key_ind(item["rotationTarget"].asString()) : 0)
+		{}
 	};
-	static_assert(offsetof(SpawnGroupData, normal) == 0x04);
-	static_assert(sizeof(SpawnGroupData) == 0x38);
+	static_assert(sizeof(SpawnGroupData) == 0x50);
 
 	struct SpawnGroupStorage
 	{
 		static void init(const Json::Value& SpawnGroups)
 		{
+			data.clear();
+
 			for (auto& key : SpawnGroups.getMemberNames()) {
 				read_json_entry(key, SpawnGroups[key]);
 			}
@@ -71,18 +66,14 @@ namespace Multicast
 
 		static void init_keys(const Json::Value& SpawnGroups)
 		{
+			keys.init();
+
 			for (auto& key : SpawnGroups.getMemberNames()) {
 				read_json_entry_keys(key, SpawnGroups[key]);
 			}
 		}
 
 		static const auto& get_data(uint32_t ind) { return data[ind - 1]; }
-
-		static void forget()
-		{
-			keys.init();
-			data.clear();
-		}
 
 		static uint32_t get_key_ind(const std::string& key) { return keys.get(key); }
 
@@ -92,30 +83,10 @@ namespace Multicast
 			uint32_t ind = keys.get(key);
 			assert(ind == data.size() + 1);
 
-			SpawnGroupData new_data;
-
-			new_data.count = parse_enum_ifIsMember<1u>(item, "count");
-			new_data.shape = parse_enum_ifIsMember<Shape__DEFAULT>(item, "shape");
-			new_data.size = new_data.shape != Shape::Single ? parse_enum_ifIsMember<0u>(item, "size"sv) : 0u;
-			new_data.rot = parse_enum_ifIsMember<LaunchDir__DEFAULT>(item, "rotation");
-			new_data.sound = parse_enum_ifIsMember<SoundType__DEFAULT>(item, "sound");
-			new_data.normalDependsX = !item.isMember("normal") || parse_enum_ifIsMember<true>(item, "xDepends"sv);
-
-			new_data.normal = JsonUtils::readOrDefault3(item, "normal"sv);
-			if (new_data.normal.SqrLength() < 0.0001f) {
-				new_data.normal = { 0, 1, 0 };
-			}
-			new_data.pos_offset = JsonUtils::readOrDefault3(item, "posOffset"sv);
-			new_data.pos_rnd = JsonUtils::readOrDefault3(item, "posRnd"sv);
-			new_data.rot_offset = JsonUtils::readOrDefault2(item, "rotOffset"sv);
-			new_data.rot_rnd = JsonUtils::readOrDefault2(item, "rotRnd"sv);
-
-			data.push_back(new_data);
+			data.emplace_back(item);
 		}
 
-		static void read_json_entry_keys(const std::string& key, const Json::Value&) {
-			keys.add(key);
-		}
+		static void read_json_entry_keys(const std::string& key, const Json::Value&) { keys.add(key); }
 
 		static inline JsonUtils::KeysMap keys;
 		static inline std::vector<SpawnGroupData> data;
@@ -153,18 +124,18 @@ namespace Multicast
 		Individual,
 		Evenly
 	};
-	static constexpr HomingDetectionType HomingDetectionType__DEFAULT = HomingDetectionType::Individual;
 
 	struct Data
 	{
-		Data(SpellArrowData origin_formIDs, TriggerFunctions::Functions newtypes, uint32_t pattern_ind,
+		Data(SpellArrowData origin_formIDs, TriggerFunctions::Functions functions, uint32_t pattern_ind,
 			HomingDetectionType homing_setting, bool call_triggers) :
 			origin_formIDs(std::move(origin_formIDs)),
-			newtypes(std::move(newtypes)), pattern_ind(pattern_ind), homing_setting(homing_setting), call_triggers(call_triggers)
+			functions(std::move(functions)), pattern_ind(pattern_ind), homing_setting(homing_setting),
+			call_triggers(call_triggers)
 		{}
 
 		SpellArrowData origin_formIDs;
-		TriggerFunctions::Functions newtypes;
+		TriggerFunctions::Functions functions;
 		uint32_t pattern_ind;                   // for SpawnGroupData
 		HomingDetectionType homing_setting: 3;  // if new type is homing, how to chose targets
 		uint32_t call_triggers: 1;
@@ -174,6 +145,8 @@ namespace Multicast
 	{
 		static void init(const Json::Value& MulticastData)
 		{
+			data.clear();
+
 			for (auto& key : MulticastData.getMemberNames()) {
 				read_json_entry(key, MulticastData[key]);
 			}
@@ -181,18 +154,14 @@ namespace Multicast
 
 		static void init_keys(const Json::Value& MulticastData)
 		{
+			keys.init();
+
 			for (auto& key : MulticastData.getMemberNames()) {
 				read_json_entry_keys(key, MulticastData[key]);
 			}
 		}
 
 		static const auto& get_data(uint32_t ind) { return data[ind - 1]; }
-
-		static void forget()
-		{
-			keys.init();
-			data.clear();
-		}
 
 		static uint32_t get_key_ind(const std::string& key) { return keys.get(key); }
 
@@ -210,9 +179,7 @@ namespace Multicast
 			}
 		}
 
-		static void read_json_entry_keys(const std::string& key, const Json::Value&) {
-			keys.add(key);
-		}
+		static void read_json_entry_keys(const std::string& key, const Json::Value&) { keys.add(key); }
 
 		static void read_json_entry_item(std::vector<Data>& new_data, const Json::Value& item)
 		{
@@ -237,30 +204,24 @@ namespace Multicast
 				assert(false);
 			}
 
-			TriggerFunctions::Functions newtypes;
-			HomingDetectionType homing_detection;
-			if (item.isMember("NewProjsType")) {
-				newtypes = TriggerFunctions::Functions(item["NewProjsType"]);
-				if (newtypes.has_homing())
-					homing_detection =
-						parse_enum_ifIsMember<HomingDetectionType__DEFAULT>(item["NewProjsType"], "homing_detection"sv);
+			TriggerFunctions::Functions functions;
+			HomingDetectionType homing_detection =
+				parse_enum_ifIsMember<HomingDetectionType::Individual>(item, "HomingDetection"sv);
+
+			if (item.isMember("TriggerFunctions")) {
+				functions = TriggerFunctions::Functions(item["TriggerFunctions"]);
 			}
 
 			auto pattern_ind = SpawnGroupStorage::get_key_ind(item["spawn_group"].asString());
 			auto call_triggers = parse_enum_ifIsMember<false>(item, "callTriggers"sv);
 
-			new_data.emplace_back(origin_formIDs, newtypes, pattern_ind, homing_detection, call_triggers);
+			new_data.emplace_back(origin_formIDs, functions, pattern_ind, homing_detection, call_triggers);
 		}
 
 		static inline JsonUtils::KeysMap keys;
 		static inline std::vector<std::vector<Data>> data;
 	};
 
-	void forget()
-	{
-		Storage::forget();
-		SpawnGroupStorage::forget();
-	}
 	uint32_t get_key_ind(const std::string& key) { return Storage::get_key_ind(key); }
 
 	namespace Sounds
@@ -279,6 +240,8 @@ namespace Multicast
 		{
 			return _generic_foo_<66370, decltype(set_sound_position)>::eval(shandle, x, y, z);
 		}
+
+		RE::BSSoundHandle tmpsound;
 
 		void play_cast_sound(RE::TESObjectREFR* caster, RE::MagicItem* spel, const RE::NiPoint3& start_pos)
 		{
@@ -408,23 +371,21 @@ namespace Multicast
 			}
 		}
 
-		struct Pane
-		{
-			RE::NiPoint3 startPos, right_dir, up_dir;
-		};
-
-		struct ShapeParams
-		{
-			float size;
-			uint32_t count;
-		};
-
 		auto get_SPItem_rot(LaunchDir rot, const RE::NiPoint3& item_pos, const RE::NiPoint3& SP_center,
-			const RE::NiPoint3& cast_dir, RE::TESObjectREFR* caster)
+			const RE::NiPoint3& cast_dir, RE::TESObjectREFR* caster, RE::TESObjectREFR* target)
 		{
 			using FenixUtils::rot_at;
 
 			switch (rot) {
+			case LaunchDir::ToTarget:
+				{
+					if (target)
+						return rot_at(item_pos, target->As<RE::Actor>() ?
+													Homing::Targeting::get_victim_pos(target->As<RE::Actor>()) :
+													target->GetPosition());
+					else
+						break;
+				}
 			case LaunchDir::FromCenter:
 				return rot_at(SP_center, item_pos);
 			case LaunchDir::ToCenter:
@@ -432,11 +393,14 @@ namespace Multicast
 			case LaunchDir::ToSight:
 				if (caster->As<RE::Actor>())
 					return rot_at(item_pos, Rotation::raycast(caster->As<RE::Actor>()));
-				[[fallthrough]];
+				else
+					break;
 			case LaunchDir::Parallel:
 			default:
-				return rot_at(cast_dir);
+				break;
 			}
+
+			return rot_at(cast_dir);
 		}
 
 		// Given cur_proj pos, SP's CD
@@ -447,16 +411,17 @@ namespace Multicast
 		// 2. Add rnd_offset to pos
 		// 3. Launch the proj either as spell or as arrow
 		auto multiCastGroupItem(RE::NiPoint3 pos, const Data& data, const CastData& SP_CD, bool withSound,
-			const RE::NiPoint3& cast_dir, RE::TESObjectREFR* caster)
+			const RE::NiPoint3& cast_dir, RE::TESObjectREFR* caster, RE::TESObjectREFR* target)
 		{
 			auto& pattern_data = SpawnGroupStorage::get_data(data.pattern_ind);
-			ProjectileRot item_rot = get_SPItem_rot(pattern_data.rot, pos, SP_CD.start_pos, cast_dir, caster);
+
+			ProjectileRot item_rot = get_SPItem_rot(pattern_data.rot, pos, SP_CD.start_pos, cast_dir, caster, target);
 
 			item_rot = Rotation::add_rot(item_rot, pattern_data.rot_offset);
 			item_rot = Rotation::add_rot_rnd(item_rot, pattern_data.rot_rnd);
 
 			RE::NiPoint3 rnd_offset = Rotation::add_point_rnd(pattern_data.pos_rnd);
-			rnd_offset = rotate(rnd_offset, { SP_CD.parallel_rot.x, SP_CD.parallel_rot.z }, pattern_data.normalDependsX);
+			rnd_offset = rotate(rnd_offset, SP_CD.parallel_rot, pattern_data.pattern.xDepends());
 			pos += rnd_offset;
 
 			auto type = SP_CD.spellarrow_data.index();
@@ -484,133 +449,16 @@ namespace Multicast
 						proj->power = 0.75f;
 						proj->weaponDamage *= proj->power;
 					}
+
+					// TODO: sound
 				}
-
-			}
-
-			if (auto proj = handle.get().get()) {
-				data.newtypes.eval(proj);
 			}
 
 			return handle;
 		}
-
-		const std::array<std::function<void(const ShapeParams& shape_params, const Pane& plane,
-							 const std::function<void(const RE::NiPoint3&)>& cast_item)>,
-			(size_t)Shape::Total>
-			MultiCasters = {  // Single
-				[](ShapeParams shape_params, const Pane& plane, const std::function<void(RE::NiPoint3)>& cast_item) {
-					for (size_t i = 0; i < shape_params.count; i++) {
-						cast_item(plane.startPos);
-					}
-				},
-				// HorizontalLine. Used in others.
-				[](ShapeParams shape_params, const Pane& plane, const std::function<void(RE::NiPoint3)>& cast_item) {
-					if (shape_params.count == 1) {
-						cast_item(plane.startPos);
-						return;
-					}
-
-					auto from = plane.startPos - plane.right_dir * (shape_params.size * 0.5f);
-					float d = shape_params.size / (shape_params.count - 1);
-					for (uint32_t i = 0; i < shape_params.count; i++) {
-						cast_item(from);
-						from += plane.right_dir * d;
-					}
-				},
-				// VerticalLine. Uses HorizontalLine.
-				[](ShapeParams shape_params, const Pane& plane, const std::function<void(RE::NiPoint3)>& cast_item) {
-					Pane new_plane = plane;
-					std::swap(new_plane.right_dir, new_plane.up_dir);
-					MultiCasters[(size_t)Shape::HorizontalLine](shape_params, new_plane, cast_item);
-				},
-				// Circle
-				[](ShapeParams shape_params, const Pane& plane, const std::function<void(RE::NiPoint3)>& cast_item) {
-					for (uint32_t i = 0; i < shape_params.count; i++) {
-						float alpha = 2 * 3.1415926f / shape_params.count * i;
-
-						auto cur_p = plane.startPos + plane.right_dir * cos(alpha) * shape_params.size +
-				                     plane.up_dir * sin(alpha) * shape_params.size;
-
-						cast_item(cur_p);
-					}
-				},
-				// HalfCircle
-				[](ShapeParams shape_params, const Pane& plane, const std::function<void(RE::NiPoint3)>& cast_item) {
-					if (shape_params.count == 1) {
-						cast_item(plane.startPos);
-						return;
-					}
-
-					for (uint32_t i = 0; i < shape_params.count; i++) {
-						float alpha = 3.1415926f / (shape_params.count - 1) * i;
-
-						auto cur_p = plane.startPos + plane.right_dir * cos(alpha) * shape_params.size +
-				                     plane.up_dir * sin(alpha) * shape_params.size;
-
-						cast_item(cur_p);
-					}
-				},
-				// FillSquare
-				[](ShapeParams shape_params, const Pane& plane, const std::function<void(RE::NiPoint3)>& cast_item) {
-					uint32_t h = (uint32_t)ceil(sqrt(shape_params.count));
-
-					if (h == 1) {
-						MultiCasters[(size_t)Shape::HorizontalLine](shape_params, plane, cast_item);
-					}
-
-					auto from = plane.startPos + plane.up_dir * (shape_params.size * 0.5f);
-					float d = shape_params.size / (h - 1);
-
-					ShapeParams params = { shape_params.size, h };
-					Pane cur_plane = plane;
-					while (shape_params.count >= h) {
-						cur_plane.startPos = from;
-						MultiCasters[(uint32_t)Shape::HorizontalLine](params, cur_plane, cast_item);
-						from -= plane.up_dir * d;
-						shape_params.count -= h;
-					}
-
-					if (shape_params.count > 0) {
-						cur_plane.startPos = from;
-						params.count = shape_params.count;
-						MultiCasters[(uint32_t)Shape::HorizontalLine](params, cur_plane, cast_item);
-					}
-				},
-				// FillCircle
-				[](ShapeParams shape_params, const Pane& plane, const std::function<void(RE::NiPoint3)>& cast_item) {
-					float c = shape_params.size / sqrtf(static_cast<float>(shape_params.count));
-					for (uint32_t i = 1; i <= shape_params.count; i++) {
-						auto alpha = 2.3999632297286533222f * i;
-						float r = c * sqrtf(static_cast<float>(i));
-
-						auto cur_p = plane.startPos + (plane.right_dir * cos(alpha) + plane.up_dir * sin(alpha)) * r;
-
-						cast_item(cur_p);
-					}
-				},
-				// Sphere
-				[](ShapeParams shape_params, const Pane& plane, const std::function<void(RE::NiPoint3)>& cast_item) {
-					float c = shape_params.size;
-					float phi = 3.883222077450933f;
-					for (uint32_t i = 1; i <= shape_params.count; i++) {
-						float y = 1 - (i / (shape_params.count - 1.0f)) * 2;
-						float radius = sqrt(1 - y * y);
-						float theta = phi * i;
-						float x = cos(theta) * radius;
-						float z = sin(theta) * radius;
-
-						auto forward_dir = plane.up_dir.UnitCross(plane.right_dir);
-
-						auto cur_p = plane.startPos + (plane.right_dir * x + plane.up_dir * z + forward_dir * y) * c;
-
-						cast_item(cur_p);
-					}
-				}
-			};
-
+		
 		// SP_CD has info about cast. Copied, because every SP has info itself.
-		void multiCastGroup(CastData SP_CD, const Data& data, RE::TESObjectREFR* caster)
+		void multiCastGroup(CastData SP_CD, const Data& data, RE::TESObjectREFR* origin, RE::TESObjectREFR* caster)
 		{
 			const auto& spellarrow_data = data.origin_formIDs;
 
@@ -652,49 +500,70 @@ namespace Multicast
 
 			auto& pattern_data = SpawnGroupStorage::get_data(data.pattern_ind);
 
-			SP_CD.start_pos += rotate(pattern_data.pos_offset, SP_CD.parallel_rot, pattern_data.normalDependsX);
+			pattern_data.pattern.initCenter(SP_CD.start_pos, SP_CD.parallel_rot, origin);
+			RE::NiPoint3 cast_dir = pattern_data.pattern.getCastDir(SP_CD.parallel_rot);
+			cast_dir.Unitize();
 
+			// Homing::Evenly support
+			std::vector<RE::Actor*> targets;
+			uint32_t homingInd = 0;
+			if (data.homing_setting == HomingDetectionType::Evenly) {
+				homingInd = pattern_data.rotation_target;
+				if (!homingInd)
+					homingInd = data.functions.get_homing_ind(false);
+
+				if (!homingInd)
+					homingInd = data.functions.get_homing_ind(true);
+
+				assert(homingInd);
+				if (homingInd) {
+					auto& homing_data = Homing::get_data(homingInd);
+					targets = homing_data.target == Homing::TargetTypes::Cursor ?
+					              Homing::Targeting::Cursor::get_cursor_targets(caster, homing_data) :
+					              Homing::Targeting::get_nearest_targets(caster, SP_CD.start_pos, homing_data);
+					
+					std::random_device rd;
+					std::mt19937 g(rd());
+					std::shuffle(targets.begin(), targets.end(), g);
+				}
+			}
+
+			// Sounds
 			// SpellData
 			if (type == 0 && pattern_data.sound == SoundType::Single)
-				Sounds::play_cast_sound(caster, std::get<CastData::SpellData>(SP_CD.spellarrow_data).spel, SP_CD.start_pos);
+				Sounds::play_cast_sound(origin, std::get<CastData::SpellData>(SP_CD.spellarrow_data).spel, SP_CD.start_pos);
 			// TODO: ArrowData
 
 			bool needsound = pattern_data.sound == SoundType::Every;
+			size_t target_ind = 0;
 
-			float size = pattern_data.shape == Shape::Single ? 0 : static_cast<float>(pattern_data.size);
+			Positioning::Plane plane(SP_CD.start_pos, cast_dir);
+			for (size_t i = 0; i < pattern_data.pattern.getSize(); i++) {
+				auto point = pattern_data.pattern.GetPosition(plane, cast_dir, i);
 
-			RE::NiPoint3 cast_dir = rotate(pattern_data.normal, SP_CD.parallel_rot, pattern_data.normalDependsX);
-			cast_dir.Unitize();
-			RE::NiPoint3 right_dir = RE::NiPoint3(0, 0, -1).UnitCross(cast_dir);
-			if (right_dir.SqrLength() == 0)
-				right_dir = { 1, 0, 0 };
-			RE::NiPoint3 up_dir = right_dir.Cross(cast_dir);
+				RE::Actor* target = nullptr;
 
-			// Homing::Evenly support
-			std::vector<RE::TESObjectREFR*> targets;
-			if (auto homingInd = data.newtypes.get_homing_ind();
-				homingInd && data.homing_setting == HomingDetectionType::Evenly) {
-				auto& homing_data = Homing::get_data(homingInd);
-				targets = homing_data.target == Homing::TargetTypes::Cursor ?
-				              Homing::Targeting::Cursor::get_cursor_targets(caster, homing_data) :
-				              Homing::Targeting::get_nearest_targets(caster, SP_CD.start_pos, homing_data);
-			}
+				if (targets.size()) {
+					target = targets[target_ind++];
+					if (target_ind >= targets.size())
+						target_ind = 0;
+				}
 
-			MultiCasters[(uint32_t)pattern_data.shape]({ size, pattern_data.count }, { SP_CD.start_pos, right_dir, up_dir },
-				[&data, &SP_CD, needsound, &cast_dir, caster, &targets](const RE::NiPoint3& item_pos) {
-					auto handle = multiCastGroupItem(item_pos, data, SP_CD, needsound, cast_dir, caster);
-					
-					if (targets.size()) {
-						if (auto proj = handle.get().get()) {
-							proj->desiredTarget = targets[FenixUtils::random_range(0, (int32_t)targets.size() - 1)]->GetHandle();
-						}
+				auto handle = multiCastGroupItem(point, data, SP_CD, needsound, cast_dir, caster, target);
+
+				if (auto proj = handle.get().get()) {
+					if (data.call_triggers) {
+						Triggers::Data ldata(proj);
+						Triggers::eval(&ldata, Triggers::Event::ProjAppeared, proj, target);
 					}
-				});
 
-			// TODO: initial direction to target
+					data.functions.call(proj, target);
+				}
+			}
 		}
 	}
-
+	/*
+	// TODO: remove
 	void onCreated(RE::Projectile* proj, uint32_t ind)
 	{
 		using namespace Casting;
@@ -715,10 +584,11 @@ namespace Multicast
 
 		auto& data = Storage::get_data(ind);
 		for (const auto& spawn_data : data) {
-			multiCastGroup(current_CD, spawn_data, proj->shooter.get().get());
+			multiCastGroup(current_CD, spawn_data, proj, proj->shooter.get().get());
 		}
 	}
 
+	// TODO: remove
 	void onCreated(Ldata* ldata, uint32_t ind)
 	{
 		using namespace Casting;
@@ -739,7 +609,46 @@ namespace Multicast
 
 		auto& data = Storage::get_data(ind);
 		for (const auto& spawn_data : data) {
-			multiCastGroup(current_CD, spawn_data, ldata->shooter);
+			multiCastGroup(current_CD, spawn_data, ldata->shooter, ldata->shooter);
+		}
+	}
+	*/
+	void apply(Triggers::Data* ldata, uint32_t ind)
+	{
+		using namespace Casting;
+
+		CastData current_CD;
+		current_CD.start_pos = ldata->pos;
+		current_CD.parallel_rot = ldata->rot;
+		switch (ldata->type) {
+		case Triggers::Data::Type::Arrow:
+			{
+				assert(ldata->weap);
+				assert(ldata->ammo);
+				current_CD.spellarrow_data = CastData::ArrowData{};
+				auto& arrow_data = std::get<CastData::ArrowData>(current_CD.spellarrow_data);
+				arrow_data.weap = ldata->weap;
+				arrow_data.ammo = ldata->ammo;
+				break;
+			}
+		case Triggers::Data::Type::Spell:
+			{
+				assert(ldata->spel);
+				current_CD.spellarrow_data = CastData::SpellData{};
+				auto& spell_data = std::get<CastData::SpellData>(current_CD.spellarrow_data);
+				spell_data.spel = ldata->spel;
+				break;
+			}
+		case Triggers::Data::Type::None:
+		default:
+			// "Current" disallowed
+			current_CD.spellarrow_data = CastData::SpellData{};
+			break;
+		}
+
+		auto& data = Storage::get_data(ind);
+		for (const auto& spawn_data : data) {
+			multiCastGroup(current_CD, spawn_data, ldata->shooter, ldata->shooter);
 		}
 	}
 

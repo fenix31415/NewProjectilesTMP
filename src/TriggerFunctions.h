@@ -2,58 +2,56 @@
 
 #include "json/json.h"
 
-struct Ldata;
+namespace Triggers
+{
+	struct Data;
+}
 
 namespace TriggerFunctions
 {
-	enum class NumberFunctions : uint32_t
+	struct Function
 	{
-		None,
-		Set,
-		Add,
-		Mul
-	};
-	static constexpr NumberFunctions NumberFunctions__DEFAULT = NumberFunctions::None;
+		enum class Type : uint32_t
+		{
+			SetRotation,
+			SetHoming,
+			SetEmitter,
+			SetFollower,
+			ChangeSpeed,
+			ChangeRange,
+			ApplyMultiCast
+		};
 
-	struct Functions
-	{
-		void eval(Ldata* ldata) const;
-		void eval(RE::Projectile* proj) const;
-		void eval3dLoaded(RE::Projectile* proj) const;
-
-		Functions() = default;
-		Functions(const Json::Value& functions);
-
-		bool has_homing() const { return homingInd != 0; }
-
-		uint32_t get_homing_ind() const { return homingInd; }
+	private:
+		Type type: 8;
+		uint32_t on_follower: 1;
 
 		struct NumberFunctionData
 		{
-			NumberFunctions type;
+			enum class NumberFunctions : uint32_t
+			{
+				Add,
+				Mul,
+				Set
+			} type;
 			float value;
 
-			NumberFunctionData()
-			{
-				type = NumberFunctions::None;
-				value = 0;
-			}
+			NumberFunctionData() : type(NumberFunctions::Add), value(0) {}
 			NumberFunctionData(const Json::Value& data);
 
 			float apply(float& val) const
 			{
 				float ans = val;
 				switch (type) {
-				case TriggerFunctions::NumberFunctions::Set:
+				case NumberFunctions::Set:
 					val = value;
 					break;
-				case TriggerFunctions::NumberFunctions::Add:
+				case NumberFunctions::Add:
 					val += value;
 					break;
-				case TriggerFunctions::NumberFunctions::Mul:
+				case NumberFunctions::Mul:
 					val *= value;
 					break;
-				case TriggerFunctions::NumberFunctions::None:
 				default:
 					break;
 				}
@@ -62,12 +60,54 @@ namespace TriggerFunctions
 		};
 		static_assert(sizeof(NumberFunctionData) == 0x8);
 
-	private:
-		uint32_t homingInd = 0;     // in HomingData
-		uint32_t multicastInd = 0;  // in MulticastData
-		uint32_t emitterInd = 0;    // in EmittersData
-		NumberFunctionData changeSpeed;
-		NumberFunctionData changeRange;
+		union
+		{
+			uint32_t ind;
+			NumberFunctionData numb;
+		};
+
+		void eval_SetRotation(RE::Projectile* proj, RE::Actor* targetOverride) const;
+		void eval_SetHoming(RE::Projectile* proj, RE::Actor* targetOverride) const;
+		void eval_SetEmitter(RE::Projectile* proj) const;
+		void eval_SetFollower(RE::Projectile* proj) const;
+		void eval_ChangeSpeed(RE::Projectile* proj) const;
+		void eval_ChangeRange(RE::Projectile* proj) const;
+		void eval_ApplyMultiCast(Triggers::Data* data) const;
+
+		uint32_t get_key_ind_disabled(const std::string& val, const std::function<uint32_t(const std::string&)>& get_key_ind)
+		{
+			if (val == "Disable") {
+				return static_cast<uint32_t>(-1);
+			} else {
+				return get_key_ind(val);
+			}
+		}
+
+	public:
+		void eval(Triggers::Data* data, RE::Projectile* proj, RE::Actor* targetOverride = nullptr) const;
+		uint32_t get_homing_ind(bool rotation) const;
+
+		Function() : type(Type::ChangeSpeed), numb() {}
+		Function(const Json::Value& function);
 	};
-	static_assert(sizeof(Functions) == 0x1C);
+
+	struct Functions
+	{
+	private:
+		std::vector<Function> functions;
+		Function changeSpeed;
+		uint32_t disable_origin: 1;
+		uint32_t changeSpeedPresent: 1;
+
+	public:
+		Functions() = default;
+		explicit Functions(const Json::Value& json_TriggerFunctions);
+
+		void call(RE::Projectile* proj, RE::Actor* targetOverride = nullptr) const;
+		void call(Triggers::Data* data, RE::Projectile* proj, RE::Actor* targetOverride, bool change_speedOnly = false) const;
+
+		uint32_t get_homing_ind(bool rotation) const;
+
+		bool should_disable_origin() const { return disable_origin; }
+	};
 }

@@ -1,0 +1,40 @@
+{
+  "FormIDs": {
+    "key_spellLightning": "Skyrim.esm|0x45F9D"
+  },
+
+  "MulticastSpawnGroups": {
+    "key_SG_1": {
+      "Pattern": {
+        "Figure": {
+          "shape": "Single",
+          "count": 1
+        }
+      }
+    }
+  },
+
+  "MulticastData": {
+    "key_MC_1": [
+      {
+        "spellID": "key_spellLightning",
+        "spawn_group": "key_SG_1"
+      }
+    ]
+  },
+
+  "Triggers": [
+    {
+      "event": "Swing",
+      "conditions": {},
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "ApplyMultiCast",
+            "id": "key_MC_1"
+          }
+        ]
+      }
+    }
+  ]
+}

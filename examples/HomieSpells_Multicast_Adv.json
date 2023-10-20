@@ -1,0 +1,84 @@
+{
+  "FormIDs": {
+    "key_spellFireball": "Skyrim.esm|0x1C789",
+    "key_spellIceSpike": "Skyrim.esm|0x2B96C",
+    "key_spellLightning": "Skyrim.esm|0x45F9D"
+  },
+
+  "MulticastSpawnGroups": {
+    "key_SG_1": {
+      "Pattern": {
+        "Figure": {
+          "shape": "Circle",
+          "count": 10,
+          "size": 50
+        },
+        "normal": [0, 0, 1],
+        "xDepends": false,
+        "origin": "NPC Spine [Spn0]"
+      },
+      "rotation": "FromCenter"
+    },
+    "key_SG_2": {
+      "Pattern": {
+        "Figure": {
+          "shape": "Line",
+          "count": 10,
+          "size": 500
+        },
+        "posOffset": [0, -100, 400],
+        "origin": "NPC Spine [Spn0]",
+        "planeRotate": 30
+      },
+      "rotOffset": [10, 0]
+    },
+    "key_SG_3": {
+      "Pattern": {
+        "Figure": {
+          "shape": "Sphere",
+          "count": 50,
+          "size": 400
+        },
+        "posOffset": [0, 0, 400],
+        "origin": "NPC Spine [Spn0]",
+        "normal": [0,1,0],
+        "xDepends": false,
+        "planeRotate": 30
+      },
+      "rotOffset": [60, 0]
+    }
+  },
+
+  "MulticastData": {
+    "key_MC_1": [
+      {
+        "spawn_group": "key_SG_1",
+        "spellID": "key_spellLightning"
+      },
+      {
+        "spawn_group": "key_SG_2",
+        "spellID": "key_spellFireball"
+      },
+      {
+        "spawn_group": "key_SG_3",
+        "spellID": "key_spellIceSpike"
+      }
+    ]
+  },
+
+  "Triggers": [
+    {
+      "event": "ProjAppeared",
+      "conditions": {},
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "ApplyMultiCast",
+            "id": "key_MC_1"
+          }
+        ],
+        "disableOrigin": true
+      }
+    }
+  ]
+}

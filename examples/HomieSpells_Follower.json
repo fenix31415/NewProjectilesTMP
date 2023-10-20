@@ -1,0 +1,38 @@
+{
+  "FormIDs": {
+    "key_projFireball": "Skyrim.esm|0x10FBED"
+  },
+
+  "FollowersData": {
+    "key_F_1": {
+      "Pattern": {
+        "Figure": {
+          "shape": "Circle",
+          "count": 10,
+          "size": 100
+        },
+        "normal": [0, 0, 1],
+        "xDepends": false,
+        "posOffset": [0, 0, 100]
+      },
+      "speed": 0
+    }
+  },
+
+  "Triggers": [
+    {
+      "event": "ProjAppeared",
+      "conditions": {
+        "ProjBaseIsFormID": "key_projFireball"
+      },
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "SetFollower",
+            "id": "key_F_1"
+          }
+        ]
+      }
+    }
+  ]
+}

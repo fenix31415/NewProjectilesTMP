@@ -9,7 +9,8 @@
     "Triggers": { "$ref": "#/$defs/Triggers" },
     "MulticastSpawnGroups": { "$ref": "#/$defs/MulticastSpawnGroups" },
     "MulticastData": { "$ref": "#/$defs/MulticastData" },
-    "EmittersData": { "$ref": "#/$defs/EmittersData" }
+    "EmittersData": { "$ref": "#/$defs/EmittersData" },
+    "FollowersData": { "$ref": "#/$defs/FollowersData" }
   },
   "additionalProperties": false,
   "required": ["Triggers"],
@@ -65,6 +66,104 @@
       "description": "Form id of xEdit record",
       "type": "string",
       "pattern": "^0x[0-9a-fA-F]{1,8}$"
+    },
+    
+    "ifFigureNotSingle": {
+      "$comment": "Size for not Single figure",
+      "if": {
+        "allOf": [
+          {
+            "not": {
+              "properties": {
+                "shape": { "const": "Single" }
+              },
+              "required": ["shape"]
+            }
+          },
+          {
+            "required": ["shape"]
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "size": {
+            "type": "integer",
+            "description": "Figure size (usually 50--500)",
+            "minimum": 1
+          }
+        },
+        "required": ["size"]
+      }
+    },
+    "Figure": {
+      "description": "Configure a figure",
+      "type": "object",
+      "properties": {
+        "count": {
+          "description": "Number of points in the figure (default: 1)",
+          "type": "integer",
+          "minimum": 1
+        },
+        "shape": {
+          "description": "A method of position points (default: Single)",
+          "enum": [
+            "Single",
+            "Line",
+            "Circle",
+            "HalfCircle",
+            "FillSquare",
+            "FillCircle",
+            "Sphere"
+          ]
+        }
+      },
+      "allOf": [{ "$ref": "#/$defs/ifFigureNotSingle" }],
+      "unevaluatedProperties": false
+    },
+    "Pattern": {
+      "description": "Configure points pattern",
+      "type": "object",
+      "properties": {
+        "Figure": { "$ref": "#/$defs/Figure" },
+        "planeRotate": {
+          "type": "number",
+          "description": "An angle to rotate the figure in the plane (default: 0)"
+        },
+        "normal": {
+          "$ref": "#/$defs/point3",
+          "description": "Normal of the spawning plane (default: [0,1,0])"
+        },
+        "origin": {
+          "type": "string",
+          "description": "Node name"
+        },
+        "posOffset": {
+          "$ref": "#/$defs/point3",
+          "description": "Offset from origin center to spawn group center (default: [0,0,0])"
+        }
+      },
+      "required": ["Figure"],
+      "allOf": [
+        {
+          "$comment": "xDepends for normal",
+          "if": {
+            "properties": {
+              "normal": true
+            },
+            "required": ["normal"]
+          },
+          "then": {
+            "properties": {
+              "xDepends": {
+                "type": "boolean",
+                "description": "Is normal depends only on left-right or on up-down too"
+              }
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
     },
 
     "ifAutoAimConstSpeed": {
@@ -127,18 +226,6 @@
         "required": ["cursorAngle"]
       }
     },
-    "HomingTypes": {
-      "description": "Type of homing trajectories",
-      "enum": ["ConstSpeed", "ConstAccel"]
-    },
-    "HomingTargets": {
-      "description": "How to capture target (Default: Nearest)",
-      "enum": ["Cursor", "Nearest"]
-    },
-    "HomingTargetAggressive": {
-      "description": "How aggressive targets to detect (default: Hostile)",
-      "enum": ["Aggressive", "Hostile", "Any"]
-    },
     "HomingData": {
       "description": "Configure homing spells",
       "type": "object",
@@ -146,13 +233,22 @@
         "^0x[0-9a-fA-F]{1,8}$|^(key_)": {
           "type": "object",
           "properties": {
-            "type": { "$ref": "#/$defs/HomingTypes" },
-            "target": { "$ref": "#/$defs/HomingTargets" },
+            "type": {
+              "description": "Type of homing trajectories",
+              "enum": ["ConstSpeed", "ConstAccel"]
+            },
+            "target": {
+              "description": "How to capture target (Default: Nearest)",
+              "enum": ["Cursor", "Nearest"]
+            },
             "checkLOS": {
               "description": "Is it necessary for the caster to see the victim (default: false)",
               "type": "boolean"
             },
-            "aggressive": { "$ref": "#/$defs/HomingTargetAggressive" }
+            "aggressive": {
+              "description": "How aggressive targets to detect (default: Hostile)",
+              "enum": ["Aggressive", "Hostile", "Any"]
+            }
           },
           "allOf": [
             { "$ref": "#/$defs/ifAutoAimConstSpeed" },
@@ -167,21 +263,6 @@
       "additionalProperties": false
     },
 
-    "Casters": {
-      "description": "Who can cast triggered version of the projectile (Default: Both)",
-      "enum": ["Both", "NPC", "Player"]
-    },
-    "TriggerConditions": {
-      "description": "A condition to evaluate",
-      "enum": [
-        "BaseIsFormID",
-        "EffectHasKwd",
-        "SpellHasKwd",
-        "CasterIsFormID",
-        "CasterBaseIsFormID",
-        "CasterHasKwd"
-      ]
-    },
     "TriggerNumberFunctionsData": {
       "type": "object",
       "description": "Change given variable using given value",
@@ -197,33 +278,208 @@
       },
       "required": ["type", "value"]
     },
+    "form_key_or_Disable": {
+      "oneOf": [{ "$ref": "#/$defs/form_key" }, { "const": "Disable" }]
+    },
+    "TriggerFunctions_function": {
+      "type": "object",
+      "description": "A function to call",
+      "properties": {
+        "type": {
+          "description": "Type of function",
+          "enum": [
+            "SetRotation",
+            "SetHoming",
+            "SetEmitter",
+            "SetFollower",
+            "ChangeSpeed",
+            "ChangeRange",
+            "ApplyMultiCast"
+          ]
+        },
+        "on_followers": {
+          "type": "boolean",
+          "description": "Run function instead of on actor's followers (default: false)"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "oneOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "SetRotation"
+                  }
+                },
+                "required": ["type"]
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "ApplyMultiCast"
+                  }
+                },
+                "required": ["type"]
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": { "$ref": "#/$defs/form_key" }
+            },
+            "required": ["id"]
+          }
+        },
+        {
+          "if": {
+            "oneOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "SetHoming"
+                  }
+                },
+                "required": ["type"]
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "SetEmitter"
+                  }
+                },
+                "required": ["type"]
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "SetFollower"
+                  }
+                },
+                "required": ["type"]
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": { "$ref": "#/$defs/form_key_or_Disable" }
+            },
+            "required" : ["id"]
+          }
+        },
+        {
+          "if": {
+            "oneOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "ChangeSpeed"
+                  }
+                },
+                "required": ["type"]
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "ChangeRange"
+                  }
+                },
+                "required": ["type"]
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": { "$ref": "#/$defs/TriggerNumberFunctionsData" }
+            },
+            "required": ["data"]
+          }
+        }
+      ],
+      "required": ["type"],
+      "unevaluatedProperties": false
+    },
     "TriggerFunctions": {
       "description": "A list of functions to set new type",
       "type": "object",
       "properties": {
-        "Homing": { "$ref": "#/$defs/form_key" },
-        "Multicast": { "$ref": "#/$defs/form_key" },
-        "Emitters": { "$ref": "#/$defs/form_key" },
-        "Speed": { "$ref": "#/$defs/TriggerNumberFunctionsData" },
-        "Range": { "$ref": "#/$defs/TriggerNumberFunctionsData" }
+        "functions": {
+          "description": "Array of functions that are called",
+          "type": "array",
+          "items": { "$ref": "#/$defs/TriggerFunctions_function" },
+          "additionalProperties": false
+        },
+        "disableOrigin": {
+          "description": "Disable origin projectile (default: false)",
+          "type": "boolean"
+        }
       },
+      "required": ["functions"],
       "additionalProperties": false
     },
     "Trigger": {
       "description": "A trigger that checks formID of bproj",
       "type": "object",
       "properties": {
-        "value": { "$ref": "#/$defs/FormOrID", "description": "An argument of condition function" },
-        "caster": { "$ref": "#/$defs/Casters" },
-        "condition": { "$ref": "#/$defs/TriggerConditions" },
-        "TriggerFunctions": { "$ref": "#/$defs/TriggerFunctions" },
-        "disableOrigin": {
-          "description": "Disable origin projectile (default: false)",
-          "type": "boolean"
-        }
+        "event": {
+          "description": "An event that triggers this trigger",
+          "enum": ["ProjAppeared", "Swing", "HitMelee", "HitByMelee", "HitProjectile", "HitByProjectile", "Cast", "EffectStart", "EffectEnd"]
+        },
+        "conditions": {
+          "type": "object",
+          "description": "An array of conditions",
+          "properties": {
+            "Hand": {
+              "enum": ["Both", "Left", "Right"],
+              "description": "Hand same as given (default: Both)"
+            },
+            "ProjBaseIsFormID": {
+              "$ref": "#/$defs/FormOrID",
+              "description": "Base projectile has given formID"
+            },
+            "EffectHasKwd": {
+              "$ref": "#/$defs/FormOrID",
+              "description": "Effect has given keyword"
+            },
+            "EffectsIsFormID": {
+              "$ref": "#/$defs/FormOrID",
+              "description": "Effect has given formID"
+            },
+            "SpellHasKwd": {
+              "$ref": "#/$defs/FormOrID",
+              "description": "Spell has given keyword"
+            },
+            "SpellIsFormID": {
+              "$ref": "#/$defs/FormOrID",
+              "description": "Spell has given formID"
+            },
+            "CasterIsFormID": {
+              "$ref": "#/$defs/FormOrID",
+              "description": "Actor has given formID"
+            },
+            "CasterBaseIsFormID": {
+              "$ref": "#/$defs/FormOrID",
+              "description": "Actor base has given formID"
+            },
+            "CasterHasKwd": {
+              "$ref": "#/$defs/FormOrID",
+              "description": "Actor has given keyword"
+            },
+            "WeaponBaseIsFormID": {
+              "$ref": "#/$defs/FormOrID",
+              "description": "Weapon base has given formID"
+            },
+            "WeaponHasKwd": {
+              "$ref": "#/$defs/FormOrID",
+              "description": "Weapon has given keyword"
+            }
+          },
+          "additionalProperties": false
+        },
+        "TriggerFunctions": { "$ref": "#/$defs/TriggerFunctions" }
       },
       "additionalProperties": false,
-      "required": ["value", "TriggerFunctions", "condition"]
+      "required": ["event", "TriggerFunctions", "conditions"]
     },
     "Triggers": {
       "description": "Configure triggers that applies new type for proj",
@@ -232,32 +488,22 @@
       "additionalProperties": false
     },
 
-    "ifSpawnGroupShapeNotSingle": {
-      "$comment": "Size for not Single shape",
+    "ifSpawnGroupToTarget": {
+      "$comment": "RotationTarget for rotation is ToTarget",
       "if": {
-        "allOf": [
-          {
-            "not": {
-              "properties": {
-                "shape": { "const": "Single" }
-              },
-              "required": ["shape"]
-            }
-          },
-          {
-            "required": ["shape"]
-          }
-        ]
+        "properties": {
+          "rotation": { "const": "ToTarget" }
+        },
+        "required": ["rotation"]
       },
       "then": {
         "properties": {
-          "size": {
-            "type": "integer",
-            "description": "Shape size (usually 50--200)",
-            "minimum": 1
+          "rotationTarget": {
+            "$ref": "#/$defs/form_key",
+            "description": "A key from HomingData"
           }
         },
-        "required": ["size"]
+        "required": ["rotationTarget"]
       }
     },
     "MulticastSpawnGroups": {
@@ -267,24 +513,7 @@
         "^0x[0-9a-fA-F]{1,8}$|^(key_)": {
           "type": "object",
           "properties": {
-            "count": {
-              "description": "Number of projectiles to spawn (default: 1)",
-              "type": "integer",
-              "minimum": 1
-            },
-            "shape": {
-              "description": "How to position projectiles (default: Single)",
-              "enum": [
-                "Single",
-                "HorizontalLine",
-                "VerticalLine",
-                "Circle",
-                "HalfCircle",
-                "FillSquare",
-                "FillCircle",
-                "Sphere"
-              ]
-            },
+            "Pattern": { "$ref": "#/$defs/Pattern" },
             "rotation": {
               "description": "How to rotate projectiles (default: Parallel)",
               "enum": [
@@ -292,52 +521,29 @@
                 "ToSight",
                 "ToCenter",
                 "FromCenter",
-                "AutoAim"
+                "ToTarget"
               ]
             },
             "sound": {
               "description": "How many times play sound for a group (default: Single)",
               "enum": ["Single", "Every", "None"]
             },
-            "normal": {
-              "$ref": "#/$defs/point3",
-              "description": "Normal of the spawning plane (default: [0,1,0])"
-            },
-            "posOffset": {
-              "$ref": "#/$defs/point3",
-              "description": "Offset from origin center to spawn group center (default: [0,0,0])"
+            "rotOffset": {
+              "$ref": "#/$defs/point2",
+              "description": "Offset of spawn group rotation from actual cast rotation (default: [0,0])"
             },
             "posRnd": {
               "$ref": "#/$defs/point3",
               "description": "Max delta for random origin (default: [0,0,0])"
-            },
-            "rotOffset": {
-              "$ref": "#/$defs/point2",
-              "description": "Offset of spawn group rotation from actual cast rotation (default: [0,0])"
             },
             "rotRnd": {
               "$ref": "#/$defs/point2",
               "description": "Rnd rotation offset for every individual proj (default: [0,0])"
             }
           },
+          "required": ["Pattern"],
           "allOf": [
-            {
-              "if": {
-                "properties": {
-                  "normal": true
-                },
-                "required": ["normal"]
-              },
-              "then": {
-                "properties": {
-                  "xDepends": {
-                    "type": "boolean",
-                    "description": "Is normal depends only on left-right or on up-down too"
-                  }
-                }
-              }
-            },
-            { "$ref": "#/$defs/ifSpawnGroupShapeNotSingle" }
+            { "$ref": "#/$defs/ifSpawnGroupToTarget" }
           ],
           "unevaluatedProperties": false
         },
@@ -345,10 +551,6 @@
       }
     },
 
-    "MulticastHomingDetection": {
-      "description": "A way to distribute projectiles into targets (default: Individual)",
-      "enum": ["Individual", "Evenly"]
-    },
     "MulticastSpell": {
       "allOf": [
         { "required": ["spellID"] },
@@ -380,18 +582,10 @@
                 "type": "boolean",
                 "description": "Do triggers called on new projectile after spawn (default: false)"
               },
-              "NewProjsType": {
-                "properties": {
-                  "homing_detection": {
-                    "$ref": "#/$defs/MulticastHomingDetection"
-                  },
-                  "Homing": { "$ref": "#/$defs/form_key" },
-                  "Multicast": { "$ref": "#/$defs/form_key" },
-                  "Emitters": { "$ref": "#/$defs/form_key" },
-                  "Speed": { "$ref": "#/$defs/TriggerNumberFunctionsData" },
-                  "Range": { "$ref": "#/$defs/TriggerNumberFunctionsData" }
-                },
-                "additionalProperties": false
+              "TriggerFunctions": { "$ref": "#/$defs/TriggerFunctions" },
+              "HomingDetection": {
+                "description": "A way to distribute projectiles into targets (default: Individual)",
+                "enum": ["Individual", "Evenly"]
               },
               "arrowID": {
                 "oneOf": [
@@ -415,31 +609,34 @@
                 "description": "A spell to cast"
               }
             },
+            "allOf": [
+              
+            ],
             "oneOf": [
               { "$ref": "#/$defs/MulticastArrow" },
               { "$ref": "#/$defs/MulticastSpell" }
             ],
             "required": ["spawn_group"],
-            "additionalProperties": false
+            "unevaluatedProperties": false
           }
         }
       },
       "additionalProperties": false
     },
 
-    "ifEmitterNewProjType": {
+    "ifEmitterTriggerFunctions": {
       "$comment": "NewProjsType field for emitter",
       "if": {
         "properties": {
-          "type": { "const": "NewProjType" }
+          "type": { "const": "TriggerFunctions" }
         },
         "required": ["type"]
       },
       "then": {
         "properties": {
-          "NewProjsType": { "$ref": "#/$defs/TriggerFunctions" }
+          "TriggerFunctions": { "$ref": "#/$defs/TriggerFunctions" }
         },
-        "required": ["NewProjsType"]
+        "required": ["TriggerFunctions"]
       }
     },
     "ifEmitterAccelerateToMaxSpeed": {
@@ -456,9 +653,13 @@
             "type": "number",
             "minimum": 0,
             "description": "A time to accelerate to max speed"
+          },
+          "speedType": {
+            "description": "A type of acceleration, from 1 to max speed with the given time.",
+            "enum": ["Linear", "Quadratic", "Exponential"]
           }
         },
-        "required": ["time"]
+        "required": ["time", "speedType"]
       }
     },
     "EmittersData": {
@@ -471,19 +672,99 @@
           "properties": {
             "interval": {
               "type": "number",
-              "minimum": 0
+              "minimum": 0,
+              "description": "An interval of calling functions"
             },
-            "type": {
-              "enum": ["NewProjType", "AccelerateToMaxSpeed"],
-              "description": "A function to call"
+            "limited": {
+              "type": "boolean",
+              "description": "Does a number of calls is limited (default: false)"
+            },
+            "count": {
+              "type": "integer",
+              "description": "A maximum number of calls (default: 1)",
+              "maximum": 30
+            },
+            "destroyAfter": {
+              "type": "boolean",
+              "description": "Whether to destroy the projectile after function call (default: false)"
+            },
+            "functions": {
+              "type": "array",
+              "description": "An array of functions that are called",
+              "items": {
+                "type": "object",
+                "description": "A function that is called in Emitter",
+                "properties": {
+                  "type": {
+                    "enum": ["TriggerFunctions", "AccelerateToMaxSpeed"],
+                    "description": "A function to call"
+                  }
+                },
+                "required": ["type"],
+                "allOf": [
+                  { "$ref": "#/$defs/ifEmitterTriggerFunctions" },
+                  { "$ref": "#/$defs/ifEmitterAccelerateToMaxSpeed" }
+                ],
+                "unevaluatedProperties": false
+              }
+            }
+          },
+          "required": ["interval", "functions"],
+          "unevaluatedProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "ifFollowerRounding": {
+      "$comment": "size, count for shape of non Single",
+      "if": {
+        "not": {
+          "properties": {
+            "rounding": { "const": "None" }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "roundingR": {
+            "description": "A radius of floating",
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": ["roundingR"]
+      }
+    },
+    "FollowersData": {
+      "description": "Configure followers spells",
+      "type": "object",
+      "patternProperties": {
+        "^0x[0-9a-fA-F]{1,8}$|^(key_)": {
+          "type": "object",
+          "description": "An instance of follower properties",
+          "properties": {
+            "Pattern": { "$ref": "#/$defs/Pattern" },
+            "rounding": {
+              "description": "Type of floating around the target point. (default: None)",
+              "enum": ["None", "Plane", "Sphere"]
+            },
+            "collision": {
+              "description": "Tweak collision. (default: Actor)",
+              "enum": ["Actor", "Spell", "None"]
+            },
+            "speed": {
+              "description": "Speed multiplier. Set 0 for instant speed. (default: 1)",
+              "type": "number",
+              "maximum": 20,
+              "minimum": 0
             }
           },
           "allOf": [
-            { "$ref": "#/$defs/ifEmitterNewProjType" },
-            { "$ref": "#/$defs/ifEmitterAccelerateToMaxSpeed" }
+            { "$ref": "#/$defs/ifFollowerRounding" }
           ],
-          "required": [ "interval", "type" ],
-          "unevaluatedProperties": false
+          "unevaluatedProperties": false,
+          "required": ["Pattern"]
         }
       },
       "additionalProperties": false

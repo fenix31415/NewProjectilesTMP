@@ -8,7 +8,10 @@ struct FenixProjsRuntimeData
 	{
 		uint32_t homing: 6;
 		uint32_t emitter: 6;
-		uint32_t unused: 20;
+		uint32_t emitter_rest: 5;
+		uint32_t follower: 6;
+		uint32_t follower_shape_ind: 8;
+		uint32_t unused: 1;
 	};
 	static_assert(sizeof(Indexes) == 4);
 
@@ -17,6 +20,13 @@ struct FenixProjsRuntimeData
 
 	void set_emitter_ind(uint32_t ind) { data.emitter = ind; }
 	uint32_t get_emitter_ind() { return data.emitter; }
+	void set_emitter_rest(uint32_t count) { data.emitter_rest = count; }
+	uint32_t get_emitter_rest() { return data.emitter_rest; }
+
+	void set_follower_ind(uint32_t ind) { data.follower = ind; }
+	uint32_t get_follower_ind() { return data.follower; }
+	void set_follower_shape_ind(uint32_t ind) { data.follower_shape_ind = ind; }
+	uint32_t get_follower_shape_ind() { return data.follower_shape_ind; }
 
 	Indexes data;
 };
@@ -31,6 +41,13 @@ uint32_t get_homing_ind(RE::Projectile* proj) { return get_runtime_data(proj).ge
 
 void set_emitter_ind(RE::Projectile* proj, uint32_t ind) { get_runtime_data(proj).set_emitter_ind(ind); }
 uint32_t get_emitter_ind(RE::Projectile* proj) { return get_runtime_data(proj).get_emitter_ind(); }
+void set_emitter_rest(RE::Projectile* proj, uint32_t count) { get_runtime_data(proj).set_emitter_rest(count); }
+uint32_t get_emitter_rest(RE::Projectile* proj) { return get_runtime_data(proj).get_emitter_rest(); }
+
+void set_follower_ind(RE::Projectile* proj, uint32_t ind) { get_runtime_data(proj).set_follower_ind(ind); }
+uint32_t get_follower_ind(RE::Projectile* proj) { return get_runtime_data(proj).get_follower_ind(); }
+void set_follower_shape_ind(RE::Projectile* proj, uint32_t ind) { get_runtime_data(proj).set_follower_shape_ind(ind); }
+uint32_t get_follower_shape_ind(RE::Projectile* proj) { return get_runtime_data(proj).get_follower_shape_ind(); }
 
 bool allows_multiple_beams(RE::Projectile* proj)
 {

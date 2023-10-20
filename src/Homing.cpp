@@ -1,9 +1,9 @@
 #include "Homing.h"
-#include "RuntimeData.h"
 #include "JsonUtils.h"
+#include "RuntimeData.h"
 
 #ifdef DEBUG
-#include "Triggers.h"
+#	include "Triggers.h"
 #endif  // DEBUG
 
 namespace Homing
@@ -12,6 +12,8 @@ namespace Homing
 	{
 		static void init(const Json::Value& HomingData)
 		{
+			data_static.clear();
+
 			for (auto& key : HomingData.getMemberNames()) {
 				read_json_entry(key, HomingData[key]);
 			}
@@ -19,18 +21,14 @@ namespace Homing
 
 		static void init_keys(const Json::Value& HomingData)
 		{
+			keys.init();
+
 			for (auto& key : HomingData.getMemberNames()) {
 				read_json_entry_keys(key, HomingData[key]);
 			}
 		}
 
 		static const auto& get_data(uint32_t ind) { return data_static[ind - 1]; }
-
-		static void forget()
-		{
-			keys.init();
-			data_static.clear();
-		}
 
 		static uint32_t get_key_ind(const std::string& key) { return keys.get(key); }
 
@@ -66,9 +64,7 @@ namespace Homing
 			data_static.emplace_back(type, target, check_los, aggressive, detection_angle, val1);
 		}
 
-		static void read_json_entry_keys(const std::string& key, const Json::Value&) {
-			keys.add(key);
-		}
+		static void read_json_entry_keys(const std::string& key, const Json::Value&) { keys.add(key); }
 
 		static inline JsonUtils::KeysMap keys;
 		static inline std::vector<Data> data_static;
@@ -77,7 +73,6 @@ namespace Homing
 	// used in multicast evenly
 	const Data& get_data(uint32_t ind) { return Storage::get_data(ind); }
 
-	void forget() { Storage::forget(); }
 	uint32_t get_key_ind(const std::string& key) { return Storage::get_key_ind(key); }
 
 	void set_homing_ind(RE::Projectile* proj, uint32_t ind) { ::set_homing_ind(proj, ind); }
@@ -102,7 +97,7 @@ namespace Homing
 			return _generic_foo_<36752, decltype(IsActorInLineOfSight)>::eval(caster, target, viewCone);
 		}
 
-		RE::NiPoint3 get_victim_pos(RE::Actor* target, float dtime = 0.0f)
+		RE::NiPoint3 get_victim_pos(RE::Actor* target, float dtime)
 		{
 			RE::NiPoint3 ans, eye_pos;
 			target->GetLinearVelocity(ans);
@@ -153,7 +148,7 @@ namespace Homing
 			       filter_target_los(_refr, caster, check_los) && filter_target_aggressive(_refr, caster, type);
 		}
 
-		RE::TESObjectREFR* find_nearest_target(RE::TESObjectREFR* caster, RE::TESObjectREFR* origin, const Data& data,
+		RE::Actor* find_nearest_target(RE::TESObjectREFR* caster, const RE::NiPoint3& origin_pos, const Data& data,
 			float within_dist2)
 		{
 			bool check_los = data.check_LOS;
@@ -162,8 +157,8 @@ namespace Homing
 			float mindist2 = 1.0E15f;
 			RE::TESObjectREFR* refr = nullptr;
 			RE::TES::GetSingleton()->ForEachReference([=, &mindist2, &refr](RE::TESObjectREFR& _refr) {
-				if (filter_target(_refr, caster, origin->GetPosition(), hostile_filter, check_los, within_dist2)) {
-					float curdist2 = origin->GetPosition().GetSquaredDistance(_refr.GetPosition());
+				if (filter_target(_refr, caster, origin_pos, hostile_filter, check_los, within_dist2)) {
+					float curdist2 = origin_pos.GetSquaredDistance(_refr.GetPosition());
 					if (curdist2 < mindist2) {
 						mindist2 = curdist2;
 						refr = &_refr;
@@ -175,20 +170,20 @@ namespace Homing
 			if (!refr)
 				return nullptr;
 
-			return refr;
+			return refr->As<RE::Actor>();
 		}
 
-		std::vector<RE::TESObjectREFR*> get_nearest_targets(RE::TESObjectREFR* caster, const RE::NiPoint3& origin_pos,
+		std::vector<RE::Actor*> get_nearest_targets(RE::TESObjectREFR* caster, const RE::NiPoint3& origin_pos,
 			const Data& data, float within_dist2)
 		{
 			bool check_los = data.check_LOS;
 			auto hostile_filter = data.hostile_filter;
 
-			std::vector<RE::TESObjectREFR*> ans;
+			std::vector<RE::Actor*> ans;
 
 			RE::TES::GetSingleton()->ForEachReference([=, &ans](RE::TESObjectREFR& _refr) {
 				if (filter_target(_refr, caster, origin_pos, hostile_filter, check_los, within_dist2)) {
-					ans.push_back(&_refr);
+					ans.push_back(_refr.As<RE::Actor>());
 				}
 				return RE::BSContainer::ForEachResult::kContinue;
 			});
@@ -229,13 +224,13 @@ namespace Homing
 				       is_near_to_cursor(caster, refr, angle);
 			}
 
-			RE::TESObjectREFR* find_cursor_target(RE::TESObjectREFR* _caster, const Data& data, float within_dist2)
+			RE::Actor* find_cursor_target(RE::TESObjectREFR* _caster, const Data& data, float within_dist2)
 			{
 				if (!_caster->IsPlayerRef())
 					return nullptr;
 
 				auto caster = _caster->As<RE::Actor>();
-				std::vector<std::pair<RE::TESObjectREFR*, float>> targets;
+				std::vector<std::pair<RE::Actor*, float>> targets;
 
 				auto angle = data.detection_angle;
 				bool check_los = data.check_LOS;
@@ -243,7 +238,8 @@ namespace Homing
 
 				RE::TES::GetSingleton()->ForEachReference([=, &targets](RE::TESObjectREFR& _refr) {
 					if (filter_target_cursor(_refr, caster, hostile_filter, check_los, angle, within_dist2)) {
-						targets.push_back({ &_refr, caster->GetPosition().GetSquaredDistance(_refr.GetPosition()) });
+						targets.push_back(
+							{ _refr.As<RE::Actor>(), caster->GetPosition().GetSquaredDistance(_refr.GetPosition()) });
 					}
 					return RE::BSContainer::ForEachResult::kContinue;
 				});
@@ -252,15 +248,15 @@ namespace Homing
 					return nullptr;
 
 				return (*std::min_element(targets.begin(), targets.end(),
-							[](const std::pair<RE::TESObjectREFR*, float>& a, const std::pair<RE::TESObjectREFR*, float>& b) {
+							[](const std::pair<RE::Actor*, float>& a, const std::pair<RE::Actor*, float>& b) {
 								return a.second < b.second;
 							}))
 				    .first;
 			}
 
-			std::vector<RE::TESObjectREFR*> get_cursor_targets(RE::TESObjectREFR* _caster, const Data& data, float within_dist2)
+			std::vector<RE::Actor*> get_cursor_targets(RE::TESObjectREFR* _caster, const Data& data, float within_dist2)
 			{
-				std::vector<RE::TESObjectREFR*> ans;
+				std::vector<RE::Actor*> ans;
 
 				if (!_caster->IsPlayerRef())
 					return ans;
@@ -311,7 +307,7 @@ namespace Homing
 			switch (target_type) {
 			case TargetTypes::Nearest:
 				{
-					refr = find_nearest_target(caster, proj ? proj : caster, data, within_dist);
+					refr = find_nearest_target(caster, (proj ? proj : caster)->GetPosition(), data, within_dist);
 					break;
 				}
 			case TargetTypes::Cursor:
@@ -397,7 +393,7 @@ namespace Homing
 			auto final_dir = final_vel;
 			final_dir.Unitize();
 			auto old_dir = proj->linearVelocity;
-			old_dir.Unitize();
+			float speed = old_dir.Unitize();
 
 			float max_angle = get_rotation_speed(proj, param) * dtime;
 			float angle = acos(old_dir.Dot(final_dir));
@@ -414,7 +410,7 @@ namespace Homing
 				{ axis.z * axis.x * one_cos_phi - axis.y * sin_phi, axis.z * axis.y * one_cos_phi + axis.x * sin_phi,
 					cos_phi + axis.z * axis.z * one_cos_phi } };
 
-			proj->linearVelocity = (R * old_dir) * proj->linearVelocity.Length();
+			proj->linearVelocity = (R * old_dir) * speed;
 		}
 
 		// constant acceleration length
@@ -525,6 +521,7 @@ namespace Homing
 			}
 
 		private:
+			// TODO: update if dist too far away
 			static bool ShouldUseDesiredTarget(RE::Projectile* proj)
 			{
 				bool ans = _ShouldUseDesiredTarget(proj);
@@ -561,17 +558,18 @@ namespace Homing
 #ifdef DEBUG
 		namespace Debug
 		{
-			uint32_t get_cursor_ind(RE::PlayerCharacter* a)
+			// TODO
+			uint32_t get_cursor_ind(RE::PlayerCharacter*)
 			{
-				if (auto obj = a->GetEquippedObject(false))
+				/*if (auto obj = a->GetEquippedObject(false))
 					if (auto spel = obj->As<RE::SpellItem>())
 						if (auto mgef = FenixUtils::getAVEffectSetting(spel))
-							if (auto ind = Triggers::Triggers::get_homing_ind(mgef->data.projectileBase)) {
+							if (auto ind = Triggers::get_homing_ind(mgef->data.projectileBase)) {
 								const auto& data = Storage::get_data(ind);
 								if (data.target == TargetTypes::Cursor)
 									return ind;
 							}
-
+							*/
 				return 0;
 			}
 
@@ -652,7 +650,29 @@ namespace Homing
 #endif  // DEBUG
 	}
 
-	void onCreated(RE::Projectile* proj, uint32_t ind)
+	void applyRotate(RE::Projectile* proj, uint32_t ind, RE::Actor* targetOverride)
+	{
+		auto caster = proj->shooter.get().get();
+		if (!caster)
+			return;
+
+		if (proj->IsMissileProjectile() || proj->IsBeamProjectile()) {
+			auto& data = Storage::get_data(ind);
+
+			if (!targetOverride)
+				targetOverride = Targeting::findTarget(proj, data);
+
+			if (targetOverride) {
+				auto dir = FenixUtils::rot_at(proj->GetPosition(), Targeting::get_victim_pos(targetOverride));
+
+				_generic_foo_<19362, void(RE::TESObjectREFR * refr, float rot_Z)>::eval(proj, dir.z);
+				_generic_foo_<19360, void(RE::TESObjectREFR * refr, float rot_X)>::eval(proj, dir.x);
+				proj->flags.reset(RE::Projectile::Flags::kAutoAim);
+			}
+		}
+	}
+
+	void apply(RE::Projectile* proj, uint32_t ind, RE::Actor* targetOverride)
 	{
 		auto caster = proj->shooter.get().get();
 		if (!caster)
@@ -666,17 +686,20 @@ namespace Homing
 			return;
 
 		auto& data = Storage::get_data(ind);
+
+		if (!targetOverride)
+			targetOverride = Targeting::findTarget(proj, data);
+		else
+			proj->desiredTarget = targetOverride->GetHandle();
+
+		if (!targetOverride)
+			return;
+
 		if (proj->IsBeamProjectile()) {
-			if (auto target = Targeting::findTarget(proj, data)) {
-				auto dir = FenixUtils::rot_at(proj->GetPosition(), Targeting::get_victim_pos(target));
+			auto dir = FenixUtils::rot_at(proj->GetPosition(), Targeting::get_victim_pos(targetOverride));
 
-				_generic_foo_<19362, void(RE::TESObjectREFR * refr, float rot_Z)>::eval(proj, dir.z);
-				_generic_foo_<19360, void(RE::TESObjectREFR * refr, float rot_X)>::eval(proj, dir.x);
-			}
-		}
-
-		if (proj->IsFlameProjectile()) {
-			Targeting::findTarget(proj, data);
+			_generic_foo_<19362, void(RE::TESObjectREFR * refr, float rot_Z)>::eval(proj, dir.z);
+			_generic_foo_<19360, void(RE::TESObjectREFR * refr, float rot_X)>::eval(proj, dir.x);
 		}
 	}
 

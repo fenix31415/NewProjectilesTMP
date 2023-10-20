@@ -1,0 +1,50 @@
+{
+  "FormIDs": {
+    "key_spellFireball": "Skyrim.esm|0x1C789"
+  },
+
+  "MulticastSpawnGroups": {
+    "key_SG_1": {
+      "Pattern": {
+        "Figure": {
+          "shape": "Line",
+          "count": 50,
+          "size": 5000
+        },
+        "planeRotate": 90,
+        "normal": [0, 1, 0],
+        "xDepends": false,
+        "origin": "NPC Spine [Spn0]",
+        "posOffset": [0, 500, 3000]
+      },
+      "rotation": "ToSight",
+      "posRnd": [200, 200, 200],
+      "rotRnd": [0, 0]
+    }
+  },
+
+  "MulticastData": {
+    "key_MC_1": [
+      {
+        "spawn_group": "key_SG_1",
+        "spellID": "key_spellFireball"
+      }
+    ]
+  },
+
+  "Triggers": [
+    {
+      "event": "ProjAppeared",
+      "conditions": {},
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "ApplyMultiCast",
+            "id": "key_MC_1"
+          }
+        ],
+        "disableOrigin": true
+      }
+    }
+  ]
+}

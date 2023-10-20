@@ -1,0 +1,196 @@
+{
+  "FormIDs": {
+    "key_spellFireball": "Skyrim.esm|0x1C789",
+    "key_spellIceSpike": "Skyrim.esm|0x2B96C",
+    "key_spellIceSpear": "Skyrim.esm|0x10F7EC",
+    "key_spellLightning": "Skyrim.esm|0x45F9D",
+    "key_spellFlames": "Skyrim.esm|0x12FCD",
+    "key_spellEmpty": "Skyrim.esm|0xE40CF",
+
+    "key_projFireball": "Skyrim.esm|0x10FBED",
+    "key_projIceSpike": "Skyrim.esm|0x2F774",
+    "key_projLightning": "Skyrim.esm|0xA9D92",
+    "key_projFlames": "Skyrim.esm|0x12FCF",
+    "key_projFirebolt": "Skyrim.esm|0x12E84",
+    "key_projLowlight": "Skyrim.esm|0x58E9C",
+    "key_projIceSpear": "Skyrim.esm|0x10FBEE",
+    "key_projEmpty": "Skyrim.esm|0x6F793",
+
+    "key_projArrowIron": "Skyrim.esm|0x3BE11",
+    "key_projArrowSteel": "Skyrim.esm|0x3BE12",
+    "key_projArrowElven": "Skyrim.esm|0x3BE15",
+    "key_projArrowGlass": "Skyrim.esm|0x3BE16",
+    "key_projArrowEbony": "Skyrim.esm|0x3BE17",
+    "key_projArrowDaedr": "Skyrim.esm|0x3BE18",
+
+    "key_projArrowOrish": "Skyrim.esm|0x3BE13",
+    "key_projArrowDwarv": "Skyrim.esm|0x3BE14",
+    "key_projArrowFalmer": "Skyrim.esm|0x3BE19",
+    "key_projArrowForsw": "Skyrim.esm|0xCEEA1",
+
+    "key_arrowIron": "Skyrim.esm|0x1397D",
+    "key_arrowSteel": "Skyrim.esm|0x1397F",
+
+    "key_kywdMagicDamageFire": "Skyrim.esm|0x1CEAD",
+    "key_kywdMagicDamageFrost": "Skyrim.esm|0x1CEAE",
+    "key_kywdMagicRestoreHealth": "Skyrim.esm|0x1CEB0"
+  },
+
+  "HomingData": {
+    "key_home": {
+      "type": "ConstSpeed",
+      "rotationTime": 1.5,
+      "aggressive": "Any"
+    }
+  },
+
+  "MulticastSpawnGroups": {
+    "key_SP_fire": {
+      "normal": [0, 0, 1],
+      "count": 10,
+      "shape": "Circle",
+      "size": 100,
+      "xDepends": false,
+      "sound": "Single"
+    },
+    "key_SP_ice": {
+      "posOffset": [0, 0, -50],
+      "normal": [1, 0, 1],
+      "count": 10,
+      "shape": "Circle",
+      "size": 100,
+      "xDepends": false,
+      "sound": "Single"
+    },
+    "key_SP_earth": {
+      "posOffset": [0, 0, -50],
+      "normal": [-1, 0, 1],
+      "count": 10,
+      "shape": "Circle",
+      "size": 100,
+      "xDepends": false,
+      "sound": "Single"
+    },
+    "key_SP_scatter": {
+      "count": 10,
+      "sound": "Single",
+      "rotRnd": [5,5]
+    }
+  },
+  "MulticastData": {
+    "key_multicast_fire": [
+      {
+        "spellID": "Current",
+        "spawn_group": "key_SP_fire",
+        "NewProjsType": {
+          "Followers": "key_follower_fire",
+          "Range": {
+            "type": "Mul",
+            "value": 10
+          }
+        }
+      }
+    ],
+    "key_multicast_ice": [
+      {
+        "spellID": "Current",
+        "spawn_group": "key_SP_ice",
+        "NewProjsType": {
+          "Followers": "key_follower_ice",
+          "Range": {
+            "type": "Mul",
+            "value": 10
+          }
+        }
+      }
+    ],
+    "key_multicast_earth": [
+      {
+        "spellID": "Current",
+        "spawn_group": "key_SP_earth",
+        "NewProjsType": {
+          "Followers": "key_follower_earth",
+          "Range": {
+            "type": "Mul",
+            "value": 10
+          }
+        }
+      }
+    ],
+    "key_multicast_fireballs": [
+      {
+        "spellID": "Current",
+        "spawn_group": "key_SP_scatter",
+        "NewProjsType": {
+          "Homing": "key_home",
+          "homing_detection": "Evenly"
+        }
+      }
+    ]
+  },
+
+  "FollowersData": {
+    "key_follower_fire": {
+      "shape": "Single",
+      "center": "Point",
+      "point": [0, 0, 100],
+      "rounding": true,
+      "roundingR": 120,
+      "normal": [0, 0, 1],
+      "xDepends": false
+    },
+    "key_follower_ice": {
+      "shape": "Single",
+      "center": "Point",
+      "point": [0, 0, 100],
+      "rounding": true,
+      "roundingR": 100,
+      "normal": [1, 0, 1],
+      "xDepends": false
+    },
+    "key_follower_earth": {
+      "shape": "Single",
+      "center": "Point",
+      "point": [0, 0, 100],
+      "rounding": true,
+      "roundingR": 100,
+      "normal": [-1, 0, 1],
+      "xDepends": false
+    }
+  },
+
+  "Triggers": [
+    {
+      "condition": "BaseIsFormID",
+      "value": "key_projFirebolt",
+      "TriggerFunctions": {
+        "Multicast": "key_multicast_fire"
+      },
+      "disableOrigin": true
+    },
+    {
+      "condition": "BaseIsFormID",
+      "value": "key_projIceSpike",
+      "TriggerFunctions": {
+        "Multicast": "key_multicast_ice"
+      },
+      "disableOrigin": true
+    },
+    {
+      "condition": "BaseIsFormID",
+      "value": "Elemental Destruction Magic Redux.esp|0x9BF",
+      "TriggerFunctions": {
+        "Multicast": "key_multicast_earth"
+      },
+      "disableOrigin": true
+    },
+    {
+      "condition": "BaseIsFormID",
+      "value": "key_projFireball",
+      "TriggerFunctions": {
+        "Multicast": "key_multicast_fireballs"
+      },
+      "disableOrigin": true
+    }
+  ]
+}

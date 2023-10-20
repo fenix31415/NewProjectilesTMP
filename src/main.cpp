@@ -52,6 +52,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 #include "Multicast.h"
 #include "Homing.h"
 #include "Emitters.h"
+#include "Followers.h"
 
 void read_json()
 {
@@ -66,19 +67,17 @@ void read_json()
 	Homing::init_keys(json_root);
 	Multicast::init_keys(json_root);
 	Emitters::init_keys(json_root);
+	Followers::init_keys(json_root);
 
 	Homing::init(json_root);
 	Multicast::init(json_root);
 	Emitters::init(json_root);
-	Triggers::Triggers::init(json_root);
+	Followers::init(json_root);
+	Triggers::init(json_root);
 }
 
 void reset_json()
 {
-	Homing::forget();
-	Multicast::forget();
-	Emitters::forget();
-
 	read_json();
 }
 
@@ -140,6 +139,7 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 		Homing::install();
 		Multicast::install();
 		Emitters::install();
+		Followers::install();
 		read_json();
 		InputHandler::GetSingleton()->enable();
 

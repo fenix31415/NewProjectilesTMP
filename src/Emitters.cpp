@@ -4,31 +4,62 @@
 
 namespace Emitters
 {
-	enum class Functions : uint32_t
+	struct SpeedData
 	{
-		NewProjType,          // call triggers in NewProjsType
-		AccelerateToMaxSpeed  // accelerate until max speed, during given time
-	};
-	static constexpr Functions Functions__DEFAULT = Functions::NewProjType;
+		enum class SpeedChangeTypes : uint32_t
+		{
+			Linear,
+			Quadratic,
+			Exponential
+		} type;
 
-	union FunctionData
-	{
-		TriggerFunctions::Functions NewProjsType;
 		float time;
+	};
+
+	struct FunctionData
+	{
+		enum class Type : uint32_t
+		{
+			AccelerateToMaxSpeed,  // accelerate until max speed, during given time
+			TriggerFunctions       // call triggers in NewProjsType
+		};
+
+		std::variant<SpeedData, TriggerFunctions::Functions> data;
+
+		explicit FunctionData(const Json::Value& function)
+		{
+			Type type = parse_enum<FunctionData::Type::TriggerFunctions>(function["type"].asString());
+			switch (type) {
+			case FunctionData::Type::AccelerateToMaxSpeed:
+				data = SpeedData{ parse_enum<SpeedData::SpeedChangeTypes::Linear>(function["speedType"].asString()),
+					function["time"].asFloat() };
+				break;
+			case FunctionData::Type::TriggerFunctions:
+				data = TriggerFunctions::Functions(function["TriggerFunctions"]);
+				break;
+			default:
+				assert(false);
+			}
+		}
+
+		Type get_type() const { return static_cast<Type>(data.index()); }
 	};
 
 	struct Data
 	{
-		Functions type: 4;
-		uint32_t destroy_after: 1;
+		std::vector<FunctionData> functions;
 		float interval;
-		FunctionData data;
+		uint32_t limited: 1;
+		uint32_t count: 30;
+		uint32_t destroy_after: 1;
 	};
 
 	struct Storage
 	{
 		static void init(const Json::Value& HomingData)
 		{
+			data_static.clear();
+
 			for (auto& key : HomingData.getMemberNames()) {
 				read_json_entry(key, HomingData[key]);
 			}
@@ -36,18 +67,14 @@ namespace Emitters
 
 		static void init_keys(const Json::Value& HomingData)
 		{
+			keys.init();
+
 			for (auto& key : HomingData.getMemberNames()) {
 				read_json_entry_keys(key, HomingData[key]);
 			}
 		}
 
 		static const auto& get_data(uint32_t ind) { return data_static[ind - 1]; }
-
-		static void forget()
-		{
-			keys.init();
-			data_static.clear();
-		}
 
 		static uint32_t get_key_ind(const std::string& key) { return keys.get(key); }
 
@@ -57,21 +84,18 @@ namespace Emitters
 			uint32_t ind = keys.get(key);
 			assert(ind == data_static.size() + 1);
 
-			Data new_data = {};
-			new_data.interval = item["interval"].asFloat();
-			new_data.destroy_after = parse_enum_ifIsMember<false>(item, "destroyAfter"sv);
-			new_data.type = parse_enum<Functions__DEFAULT>(item["type"].asString());
-			switch (new_data.type) {
-			case Functions::AccelerateToMaxSpeed:
-				new_data.data.time = item["time"].asFloat();
-				break;
-			case Functions::NewProjType:
-			default:
-				new_data.data.NewProjsType = TriggerFunctions::Functions(item["NewProjsType"]);
-				break;
-			}
+			const auto& functions = item["functions"];
 
-			data_static.push_back(new_data);
+			data_static.emplace_back(std::vector<FunctionData>(), item["interval"].asFloat(),
+				parse_enum_ifIsMember<false>(item, "limited"sv), parse_enum_ifIsMember<1u>(item, "count"sv),
+				parse_enum_ifIsMember<false>(item, "destroyAfter"sv));
+
+			auto& new_functions = data_static.back().functions;
+			for (size_t i = 0; i < functions.size(); i++) {
+				const auto& function = functions[(int)i];
+
+				new_functions.emplace_back(function);
+			}
 		}
 
 		static void read_json_entry_keys(const std::string& key, const Json::Value&) {
@@ -82,7 +106,6 @@ namespace Emitters
 		static inline std::vector<Data> data_static;
 	};
 
-	void forget() { Storage::forget(); }
 	uint32_t get_key_ind(const std::string& key) { return Storage::get_key_ind(key); }
 
 	void init(const Json::Value& json_root)
@@ -108,8 +131,18 @@ namespace Emitters
 	{
 		if (proj->IsMissileProjectile()) {
 			set_emitter_ind(proj, ind == static_cast<uint32_t>(-1) ? 0 : ind);
+			if (is_emitter(proj)) {
+				auto emitter_ind = get_emitter_ind(proj);
+				auto& data = Storage::get_data(emitter_ind);
+				if (data.limited) {
+					set_emitter_rest(proj, data.count);
+				}
+			}
 		}
 	}
+
+	// SkyrimSE.exe+74DC20
+	float get_proj_speed(RE::Projectile* proj) { return _generic_foo_<42958, decltype(get_proj_speed)>::eval(proj); }
 
 	void onUpdate(RE::Projectile* proj, float dtime)
 	{
@@ -120,30 +153,66 @@ namespace Emitters
 		if (proj->livingTime < data.interval)
 			return;
 
+		if (data.limited && get_emitter_rest(proj) == 0)
+			return;
+
 		proj->livingTime = 0.000001f;
 
-		switch (data.type) {
-		case Functions::NewProjType:
-			data.data.NewProjsType.eval(proj);
-			break;
-		case Functions::AccelerateToMaxSpeed:
-			{
-				// y = a*e^bx, a = M/X, b = ln X / N
-				//constexpr float X = 70.0f;
-				constexpr float LN_X = 4.248495242049359f;  // ln 70
-				float b = LN_X / data.data.time;
-				float cur_speed = proj->linearVelocity.Length();
-				float add_to_speed = exp(b * dtime);
-				float new_speed = cur_speed * add_to_speed;
-				proj->linearVelocity *= (new_speed / cur_speed);
+		for (const auto& function : data.functions) {
+			switch (function.get_type()) {
+			case FunctionData::Type::TriggerFunctions:
+				std::get<TriggerFunctions::Functions>(function.data).call(proj);
+				break;
+			case FunctionData::Type::AccelerateToMaxSpeed:
+				{
+					// TODO: fix
+					// y = a*e^bx, a = M/X, b = ln X / N
+					//constexpr float X = 70.0f;
+					//constexpr float LN_X = 4.248495242049359f;  // ln 70
+					//float b = LN_X / function.args.time;
+					//float cur_speed = proj->linearVelocity.Length();
+					//float add_to_speed = exp(b * dtime);
+					//float new_speed = cur_speed * add_to_speed;
+					//proj->linearVelocity *= (new_speed / cur_speed);
+
+					float max_speed = get_proj_speed(proj);
+					float cur_speed = proj->linearVelocity.Length();
+					if (cur_speed < max_speed) {
+						auto& function_speed = std::get<SpeedData>(function.data);
+						float TOTAL_TIME = function_speed.time;
+						float dspeed = 0;
+						switch (function_speed.type) {
+						case SpeedData::SpeedChangeTypes::Linear:
+							dspeed = max_speed / TOTAL_TIME * dtime;
+							break;
+						case SpeedData::SpeedChangeTypes::Quadratic:
+							dspeed = 2 * std::sqrt(cur_speed * max_speed) * TOTAL_TIME * dtime;
+							break;
+						case SpeedData::SpeedChangeTypes::Exponential:
+							dspeed = cur_speed * std::log(max_speed) / TOTAL_TIME * dtime;
+							break;
+						}
+
+						float new_speed = cur_speed + dspeed;
+						proj->linearVelocity *= (new_speed / cur_speed);
+					}
+				}
+				break;
+			default:
+				break;
 			}
-			break;
-		default:
-			break;
 		}
 
-		if (data.destroy_after) {
-			_generic_foo_<42930, void(RE::Projectile*)>::eval(proj);
+		if (data.limited) {
+			auto rest = get_emitter_rest(proj);
+			set_emitter_rest(proj, rest - 1);
+			if (rest == 1) {
+				if (data.destroy_after) {
+					proj->Kill();
+				} else {
+					disable_emitter(proj);
+				}
+			}
 		}
 	}
 
@@ -181,7 +250,6 @@ namespace Emitters
 				}
 				return ans;
 			}
-
 			static void BSSoundHandle__ClearFollowedObject(char* sound)
 			{
 				_BSSoundHandle__ClearFollowedObject(sound);

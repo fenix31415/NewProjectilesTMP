@@ -4,7 +4,6 @@
 
 namespace Emitters
 {
-	void forget();
 	uint32_t get_key_ind(const std::string& key);
 	void install();
 	void init(const Json::Value& json_root);
