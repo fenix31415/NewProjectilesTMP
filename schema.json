@@ -114,10 +114,14 @@
             "HalfCircle",
             "FillSquare",
             "FillCircle",
-            "Sphere"
+            "FillHalfCircle",
+            "Sphere",
+            "HalfSphere",
+            "Cylinder"
           ]
         }
       },
+      "required": [ "shape" ],
       "allOf": [{ "$ref": "#/$defs/ifFigureNotSingle" }],
       "unevaluatedProperties": false
     },
@@ -134,6 +138,10 @@
           "$ref": "#/$defs/point3",
           "description": "Normal of the spawning plane (default: [0,1,0])"
         },
+        "xDepends": {
+          "type": "boolean",
+          "description": "Is normal depends only on left-right or on up-down too (default: true)"
+        },
         "origin": {
           "type": "string",
           "description": "Node name"
@@ -144,25 +152,6 @@
         }
       },
       "required": ["Figure"],
-      "allOf": [
-        {
-          "$comment": "xDepends for normal",
-          "if": {
-            "properties": {
-              "normal": true
-            },
-            "required": ["normal"]
-          },
-          "then": {
-            "properties": {
-              "xDepends": {
-                "type": "boolean",
-                "description": "Is normal depends only on left-right or on up-down too"
-              }
-            }
-          }
-        }
-      ],
       "unevaluatedProperties": false
     },
 
@@ -278,9 +267,6 @@
       },
       "required": ["type", "value"]
     },
-    "form_key_or_Disable": {
-      "oneOf": [{ "$ref": "#/$defs/form_key" }, { "const": "Disable" }]
-    },
     "TriggerFunctions_function": {
       "type": "object",
       "description": "A function to call",
@@ -288,13 +274,17 @@
         "type": {
           "description": "Type of function",
           "enum": [
-            "SetRotation",
+            "SetRotationHoming",
+            "SetRotationToSight",
             "SetHoming",
             "SetEmitter",
             "SetFollower",
             "ChangeSpeed",
             "ChangeRange",
-            "ApplyMultiCast"
+            "ApplyMultiCast",
+            "DisableHoming",
+            "DisableFollower",
+            "DisableEmitter"
           ]
         },
         "on_followers": {
@@ -309,7 +299,7 @@
               {
                 "properties": {
                   "type": {
-                    "const": "SetRotation"
+                    "const": "SetRotationHoming"
                   }
                 },
                 "required": ["type"]
@@ -321,19 +311,7 @@
                   }
                 },
                 "required": ["type"]
-              }
-            ]
-          },
-          "then": {
-            "properties": {
-              "id": { "$ref": "#/$defs/form_key" }
-            },
-            "required": ["id"]
-          }
-        },
-        {
-          "if": {
-            "oneOf": [
+              },
               {
                 "properties": {
                   "type": {
@@ -362,9 +340,27 @@
           },
           "then": {
             "properties": {
-              "id": { "$ref": "#/$defs/form_key_or_Disable" }
+              "id": { "$ref": "#/$defs/form_key" }
             },
-            "required" : ["id"]
+            "required": ["id"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "DisableFollower"
+              }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "properties": {
+              "restore_speed": {
+                "type": "boolean",
+                "description": "Keep speed or set as default (default: true)"
+              }
+            }
           }
         },
         {

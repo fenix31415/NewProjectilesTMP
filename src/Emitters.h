@@ -8,5 +8,6 @@ namespace Emitters
 	void install();
 	void init(const Json::Value& json_root);
 	void init_keys(const Json::Value& json_root);
-	void onCreated(RE::Projectile* proj, uint32_t ind);
+	void apply(RE::Projectile* proj, uint32_t ind);
+	void disable(RE::Projectile* proj);
 }

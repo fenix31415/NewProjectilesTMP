@@ -1,0 +1,74 @@
+{
+  "FormIDs": {
+    "key_projFirebolt": "Skyrim.esm|0x12E84"
+  },
+
+  "HomingData": {
+    "key_H_1": {
+      "type": "ConstSpeed",
+      "rotationTime": 1,
+      "aggressive": "Any"
+    }
+  },
+
+  "FollowersData": {
+    "key_F_1": {
+      "Pattern": {
+        "Figure": {
+          "shape": "HalfCircle",
+          "size": 100,
+          "count": 10
+        },
+        "normal": [0, 1, 0],
+        "xDepends": false,
+        "posOffset": [0, -50, 0],
+        "origin": "NPC Spine [Spn0]"
+      },
+      "collision": "None"
+    }
+  },
+
+  "Triggers": [
+    {
+      "event": "ProjAppeared",
+      "conditions": {
+        "ProjBaseIsFormID": "key_projFirebolt"
+      },
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "SetFollower",
+            "id": "key_F_1"
+          },
+          {
+            "type": "ChangeSpeed",
+            "data": {
+              "type": "Mul",
+              "value": 0.1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "event": "HitByProjectile",
+      "conditions": {
+        "CasterIsFormID": "0x14"
+      },
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "SetRotation",
+            "id": "key_H_1",
+            "on_followers": true
+          },
+          {
+            "type": "SetFollower",
+            "id": "Disable",
+            "on_followers": true
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -4,7 +4,6 @@
 
 namespace Positioning
 {
-	// TODO: half sphere, cylinder
 	enum class Shape : uint32_t
 	{
 		Single,
@@ -13,11 +12,13 @@ namespace Positioning
 		HalfCircle,
 		FillSquare,
 		FillCircle,
+		FillHalfCircle,
 		Sphere,
+		HalfSphere,
+		Cylinder,
 
 		Total
 	};
-	static constexpr Shape Shape__DEFAULT = Shape::Single;
 
 	struct Plane
 	{
@@ -36,33 +37,29 @@ namespace Positioning
 		RE::NiPoint3 unproject(const RE::NiPoint2& P) const { return right_dir * P.x + up_dir * P.y + startPos; }
 	};
 
-	RE::NiPoint3 rotate(RE::NiPoint3 P, float alpha, const RE::NiPoint3& origin, const RE::NiPoint3& axis);
-
 	struct Pattern
 	{
 		explicit Pattern(const Json::Value& item) :
-			origin(item.isMember("origin") ? item["origin"].asString() : ""), normal(JsonUtils::readOrDefault3(item, "normal"sv)),
-			rotate_alpha(item.isMember("planeRotate") ? (item["planeRotate"].asFloat() * 3.14159265358f / 180.0f) : 0),
-			pos_offset(JsonUtils::readOrDefault3(item, "posOffset"sv)),
-			normalDependsX(!item.isMember("normal") || parse_enum_ifIsMember<true>(item, "xDepends"sv)),
-			shape(parse_enum_ifIsMember<Shape__DEFAULT>(item["Figure"], "shape")),
-			count(parse_enum_ifIsMember<1u>(item["Figure"], "count")),
-			size(shape != Shape::Single ? static_cast<float>(parse_enum_ifIsMember<0u>(item["Figure"], "size"sv)) : 0)
+			origin(JsonUtils::mb_getString(item, "origin")),
+			normal(JsonUtils::mb_getPoint3<RE::NiPoint3(0, 1, 0)>(item, "normal")),
+			rotate_alpha(JsonUtils::mb_getFloat(item, "planeRotate") * 3.14159265358f / 180.0f),
+			pos_offset(JsonUtils::mb_getPoint3(item, "posOffset")),
+			normalDependsX(JsonUtils::mb_read_field<true>(item, "xDepends")),
+			shape(JsonUtils::read_enum<Shape>(item["Figure"], "shape")),
+			count(JsonUtils::mb_read_field<1u>(item["Figure"], "count")),
+			size(shape != Shape::Single ? static_cast<float>(JsonUtils::mb_read_field<0u>(item["Figure"], "size")) : 0)
+		{}
+
+		static RE::NiPoint3 rotateDependsX(const RE::NiPoint3& A, RE::Projectile::ProjectileRot parallel_rot, bool dependsX)
 		{
-			if (normal.SqrLength() < 0.0001f) {
-				normal = { 0, 1, 0 };
-			}
+			return FenixUtils::Geom::rotate(A, RE::NiPoint3(dependsX ? parallel_rot.x : 0, 0, parallel_rot.z));
 		}
 
-	private:
-		static RE::NiPoint3 rotate(const RE::NiPoint3& normal, const RE::Projectile::ProjectileRot& parallel_rot, bool dependsX)
+		RE::NiPoint3 rotateDependsX(const RE::NiPoint3& A, RE::Projectile::ProjectileRot parallel_rot) const
 		{
-			RE::NiMatrix3 M;
-			M.EulerAnglesToAxesZXY(dependsX ? parallel_rot.x : 0, 0, parallel_rot.z);
-			return M * normal;
+			return rotateDependsX(A, parallel_rot, normalDependsX);
 		}
 
-	public:
 		// By default center is in getposition.
 		// Use bone position if possible, as wel as shift it to pos_offset
 		void initCenter(RE::NiPoint3& center, const RE::Projectile::ProjectileRot& rot, RE::TESObjectREFR* origin_refr) const
@@ -73,13 +70,13 @@ namespace Positioning
 					center = bone->world.translate;
 				}
 			}
-			center += rotate(pos_offset, rot, normalDependsX);
+			center += rotateDependsX(pos_offset, rot);
 		}
 
 		// Get actual pattern direction, uses normal to rotate initial cast direction
 		RE::NiPoint3 getCastDir(const RE::Projectile::ProjectileRot& parallel_rot) const
 		{
-			return rotate(normal, parallel_rot, normalDependsX);
+			return rotateDependsX(normal, parallel_rot);
 		}
 
 	private:
@@ -98,13 +95,16 @@ namespace Positioning
 		RE::NiPoint3 GetPosition_HalfCircle(const Plane& plane, size_t ind) const;
 		RE::NiPoint3 GetPosition_FillSquare(const Plane& plane, size_t ind) const;
 		RE::NiPoint3 GetPosition_FillCircle(const Plane& plane, size_t ind) const;
+		RE::NiPoint3 GetPosition_FillHalfCircle(const Plane& plane, size_t ind) const;
 		RE::NiPoint3 GetPosition_Sphere(const Plane& plane, size_t ind) const;
+		RE::NiPoint3 GetPosition_HalfSphere(const Plane& plane, size_t ind) const;
+		RE::NiPoint3 GetPosition_Cylinder(const Plane& plane, size_t) const;
 
 		// Rotate point of the figure
 		RE::NiPoint3 rotateFigure(const RE::NiPoint3& P, const RE::NiPoint3& O, const RE::NiPoint3& axis) const
 		{
 			if (rotate_alpha != 0.0f) {
-				return Positioning::rotate(P, rotate_alpha, O, axis);
+				return FenixUtils::Geom::rotate(P, rotate_alpha, O, axis);
 			}
 			return P;
 		}
@@ -122,8 +122,14 @@ namespace Positioning
 				return GetPosition_FillSquare(plane, ind);
 			case Positioning::Shape::FillCircle:
 				return GetPosition_FillCircle(plane, ind);
+			case Positioning::Shape::FillHalfCircle:
+				return GetPosition_FillHalfCircle(plane, ind);
 			case Positioning::Shape::Sphere:
 				return GetPosition_Sphere(plane, ind);
+			case Positioning::Shape::HalfSphere:
+				return GetPosition_HalfSphere(plane, ind);
+			case Positioning::Shape::Cylinder:
+				return GetPosition_Cylinder(plane, ind);
 			case Positioning::Shape::Single:
 			case Positioning::Shape::Total:
 			default:

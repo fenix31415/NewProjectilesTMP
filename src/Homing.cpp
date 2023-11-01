@@ -2,12 +2,40 @@
 #include "JsonUtils.h"
 #include "RuntimeData.h"
 
-#ifdef DEBUG
-#	include "Triggers.h"
-#endif  // DEBUG
-
 namespace Homing
 {
+	enum class HomingTypes : uint32_t
+	{
+		ConstSpeed,  // Projectile has constant speed
+		ConstAccel   // Projectile has constant rotation time
+	};
+
+	enum class TargetTypes : uint32_t
+	{
+		Nearest,  // Find nearest target
+		Cursor    // Find closest to cursor (within radius) target
+	};
+	static constexpr TargetTypes TargetTypes__DEFAULT = TargetTypes::Nearest;
+
+	enum class AggressiveTypes : uint32_t
+	{
+		Aggressive,  // Accept only aggressive to caster at the moment targets
+		Hostile,     // Accept only hostile targets
+		Any,         // Accept any target
+	};
+	static constexpr AggressiveTypes AggressiveTypes__DEFAULT = AggressiveTypes::Hostile;
+
+	struct Data
+	{
+		HomingTypes type: 1;
+		TargetTypes target: 2;
+		uint32_t check_LOS: 1;
+		AggressiveTypes hostile_filter: 2;
+		float detection_angle;  // valid for target == cursor
+		float val1;             // rotation time (ConstSpeed) or acceleration (ConstAccel)
+	};
+	static_assert(sizeof(Data) == 12);
+
 	struct Storage
 	{
 		static void init(const Json::Value& HomingData)
@@ -35,26 +63,26 @@ namespace Homing
 	private:
 		static void read_json_entry(const std::string& key, const Json::Value& item)
 		{
-			uint32_t ind = keys.get(key);
+			[[maybe_unused]] uint32_t ind = keys.get(key);
 			assert(ind == data_static.size() + 1);
 
-			auto type = parse_enum<HomingTypes__DEFAULT>(item["type"].asString());
-			auto target = parse_enum_ifIsMember<TargetTypes__DEFAULT>(item, "target"sv);
-			bool check_los = parse_enum_ifIsMember<false>(item, "checkLOS"sv);
-			auto aggressive = parse_enum_ifIsMember<AggressiveTypes__DEFAULT>(item, "aggressive"sv);
+			auto type = JsonUtils::read_enum<HomingTypes>(item, "type");
+			auto target = JsonUtils::mb_read_field<TargetTypes__DEFAULT>(item, "target");
+			bool check_los = JsonUtils::mb_read_field<false>(item, "checkLOS");
+			auto aggressive = JsonUtils::mb_read_field<AggressiveTypes__DEFAULT>(item, "aggressive");
 
 			float detection_angle = 0.0f;
 			if (target == TargetTypes::Cursor) {
-				detection_angle = item["cursorAngle"].asFloat();
+				detection_angle = JsonUtils::getFloat(item, "cursorAngle");
 			}
 
 			float val1 = 0.0f;
 			switch (type) {
 			case HomingTypes::ConstAccel:
-				val1 = item["acceleration"].asFloat();
+				val1 = JsonUtils::getFloat(item, "acceleration");
 				break;
 			case HomingTypes::ConstSpeed:
-				val1 = item["rotationTime"].asFloat();
+				val1 = JsonUtils::getFloat(item, "rotationTime");
 				break;
 			default:
 				assert(false);
@@ -82,30 +110,9 @@ namespace Homing
 
 	namespace Targeting
 	{
-		enum class LineOfSightLocation : std::uint32_t
-		{
-			kNone = 0,
-			kEyes = 1,   // Eye level
-			kHead = 2,   // 85%
-			kTorso = 3,  // 50%
-			kFeet = 4    // 15%
-		};
-		static_assert(sizeof(LineOfSightLocation) == 0x4);
+		constexpr float WITHIN_DIST2 = 4.0E7f;
 
-		static LineOfSightLocation IsActorInLineOfSight(RE::Actor* caster, RE::Actor* target, float viewCone = 100)
-		{
-			return _generic_foo_<36752, decltype(IsActorInLineOfSight)>::eval(caster, target, viewCone);
-		}
-
-		RE::NiPoint3 get_victim_pos(RE::Actor* target, float dtime)
-		{
-			RE::NiPoint3 ans, eye_pos;
-			target->GetLinearVelocity(ans);
-			ans *= dtime;
-			FenixUtils::Actor__get_eye_pos(target, eye_pos, 3);
-			ans += eye_pos;
-			return ans;
-		}
+		using FenixUtils::Geom::Actor::AnticipatePos;
 
 		bool is_hostile(RE::TESObjectREFR* refr, RE::TESObjectREFR* _caster)
 		{
@@ -113,7 +120,6 @@ namespace Homing
 			auto caster = _caster->As<RE::Actor>();
 			if (!target || !caster)
 				return false;
-			//a->IsHostileToActor(RE::PlayerCharacter::GetSingleton())
 			return target->currentCombatTarget.get().get() == caster;
 		}
 
@@ -126,7 +132,7 @@ namespace Homing
 		bool filter_target_los(RE::TESObjectREFR& _refr, RE::TESObjectREFR* caster, bool check_los)
 		{
 			return !check_los || !caster->As<RE::Actor>() || !_refr.As<RE::Actor>() ||
-			       IsActorInLineOfSight(caster->As<RE::Actor>(), _refr.As<RE::Actor>()) != LineOfSightLocation::kNone;
+			       FenixUtils::Geom::Actor::ActorInLOS(caster->As<RE::Actor>(), _refr.As<RE::Actor>(), 100);
 		}
 
 		bool filter_target_aggressive(RE::TESObjectREFR& _refr, RE::TESObjectREFR* caster, AggressiveTypes type)
@@ -149,7 +155,7 @@ namespace Homing
 		}
 
 		RE::Actor* find_nearest_target(RE::TESObjectREFR* caster, const RE::NiPoint3& origin_pos, const Data& data,
-			float within_dist2)
+			float within_dist2 = WITHIN_DIST2)
 		{
 			bool check_los = data.check_LOS;
 			auto hostile_filter = data.hostile_filter;
@@ -173,8 +179,8 @@ namespace Homing
 			return refr->As<RE::Actor>();
 		}
 
-		std::vector<RE::Actor*> get_nearest_targets(RE::TESObjectREFR* caster, const RE::NiPoint3& origin_pos,
-			const Data& data, float within_dist2)
+		std::vector<RE::Actor*> get_nearest_targets(RE::TESObjectREFR* caster, const RE::NiPoint3& origin_pos, const Data& data,
+			float within_dist2 = WITHIN_DIST2)
 		{
 			bool check_los = data.check_LOS;
 			auto hostile_filter = data.hostile_filter;
@@ -207,11 +213,11 @@ namespace Homing
 			{
 				RE::NiPoint3 caster_pos, caster_sight, target_pos;
 
-				FenixUtils::Actor__get_eye_pos(caster, caster_pos, 2);
-				FenixUtils::Actor__get_eye_pos(target, target_pos, 3);
+				caster_pos = FenixUtils::Geom::Actor::CalculateLOSLocation(caster, FenixUtils::LineOfSightLocation::kHead);
+				target_pos = FenixUtils::Geom::Actor::CalculateLOSLocation(target, FenixUtils::LineOfSightLocation::kTorso);
 
 				caster_sight = caster_pos;
-				caster_sight += FenixUtils::rotate(1, caster->data.angle);
+				caster_sight += FenixUtils::Geom::angles2dir(caster->data.angle);
 
 				return is_anglebetween_less(caster_pos, caster_sight, target_pos, angle);
 			}
@@ -224,7 +230,7 @@ namespace Homing
 				       is_near_to_cursor(caster, refr, angle);
 			}
 
-			RE::Actor* find_cursor_target(RE::TESObjectREFR* _caster, const Data& data, float within_dist2)
+			RE::Actor* find_cursor_target(RE::TESObjectREFR* _caster, const Data& data, float within_dist2 = WITHIN_DIST2)
 			{
 				if (!_caster->IsPlayerRef())
 					return nullptr;
@@ -254,7 +260,8 @@ namespace Homing
 				    .first;
 			}
 
-			std::vector<RE::Actor*> get_cursor_targets(RE::TESObjectREFR* _caster, const Data& data, float within_dist2)
+			std::vector<RE::Actor*> get_cursor_targets(RE::TESObjectREFR* _caster, const Data& data,
+				float within_dist2 = WITHIN_DIST2)
 			{
 				std::vector<RE::Actor*> ans;
 
@@ -329,23 +336,19 @@ namespace Homing
 				proj->desiredTarget = refr->GetHandle();
 			return refr->As<RE::Actor>();
 		}
-
 	}
 
 	namespace Moving
 	{
-		// SkyrimSE.exe+74DC20
-		float get_proj_speed(RE::Projectile* proj) { return _generic_foo_<42958, decltype(get_proj_speed)>::eval(proj); }
-
 		bool get_shoot_dir(RE::Projectile* proj, RE::Actor* target, float dtime, RE::NiPoint3& ans)
 		{
 			RE::NiPoint3 target_dir;
 			target->GetLinearVelocity(target_dir);
 			double target_speed = target_dir.Length();
 
-			double proj_speed = get_proj_speed(proj);
+			double proj_speed = FenixUtils::Projectile__GetSpeed(proj);
 
-			auto target_pos = Targeting::get_victim_pos(target, dtime);
+			auto target_pos = Targeting::AnticipatePos(target, dtime);
 			auto strait_dir = target_pos - proj->GetPosition();
 
 			double a = proj_speed * proj_speed - target_speed * target_speed;
@@ -392,25 +395,8 @@ namespace Homing
 
 			auto final_dir = final_vel;
 			final_dir.Unitize();
-			auto old_dir = proj->linearVelocity;
-			float speed = old_dir.Unitize();
-
-			float max_angle = get_rotation_speed(proj, param) * dtime;
-			float angle = acos(old_dir.Dot(final_dir));
-			auto axis = old_dir.UnitCross(final_dir);
-
-			float phi = fmin(max_angle, angle);
-			float cos_phi = cos(phi);
-			float sin_phi = sin(phi);
-			float one_cos_phi = 1 - cos_phi;
-			RE::NiMatrix3 R = { { cos_phi + one_cos_phi * axis.x * axis.x, axis.x * axis.y * one_cos_phi - axis.z * sin_phi,
-									axis.x * axis.z * one_cos_phi + axis.y * sin_phi },
-				{ axis.y * axis.x * one_cos_phi + axis.z * sin_phi, cos_phi + axis.y * axis.y * one_cos_phi,
-					axis.y * axis.z * one_cos_phi - axis.x * sin_phi },
-				{ axis.z * axis.x * one_cos_phi - axis.y * sin_phi, axis.z * axis.y * one_cos_phi + axis.x * sin_phi,
-					cos_phi + axis.z * axis.z * one_cos_phi } };
-
-			proj->linearVelocity = (R * old_dir) * speed;
+			proj->linearVelocity = FenixUtils::Geom::rotateVel(proj->linearVelocity, get_rotation_speed(proj, param) * dtime,
+				proj->linearVelocity.UnitCross(final_dir));
 		}
 
 		// constant acceleration length
@@ -429,45 +415,10 @@ namespace Homing
 			V -= proj->linearVelocity;
 			V.Unitize();
 			V *= get_acceleration(proj, param);
-			speed = get_proj_speed(proj);
+			speed = FenixUtils::Projectile__GetSpeed(proj);
 			proj->linearVelocity += V;
 			float newspeed = proj->linearVelocity.Length();
 			proj->linearVelocity *= speed / newspeed;
-		}
-
-		void SetRotationMatrix(RE::NiMatrix3& a_matrix, float sacb, float cacb, float sb)
-		{
-			float cb = std::sqrtf(1 - sb * sb);
-			float ca = cacb / cb;
-			float sa = -sacb / cb;
-			a_matrix.entry[0][0] = ca;
-			a_matrix.entry[0][1] = sacb;
-			a_matrix.entry[0][2] = sa * sb;
-			a_matrix.entry[1][0] = sa;
-			a_matrix.entry[1][1] = cacb;
-			a_matrix.entry[1][2] = -ca * sb;
-			a_matrix.entry[2][0] = 0.0;
-			a_matrix.entry[2][1] = sb;
-			a_matrix.entry[2][2] = cb;
-		}
-
-		void update_node_rotation(RE::Projectile* proj)
-		{
-			RE::NiPoint3 proj_dir = proj->linearVelocity;
-			proj_dir.Unitize();
-
-			proj->data.angle.x = asin(proj_dir.z);
-			proj->data.angle.z = atan2(proj_dir.x, proj_dir.y);
-
-			if (proj_dir.x < 0.0) {
-				proj->data.angle.x += 3.1415926f;
-			}
-
-			if (proj->data.angle.z < 0.0) {
-				proj->data.angle.z += 3.1415926f;
-			}
-
-			SetRotationMatrix(proj->Get3D2()->local.rotate, proj_dir.x, proj_dir.y, proj_dir.z);
 		}
 
 		void change_direction_linVel(RE::Projectile* proj, float dtime)
@@ -496,7 +447,7 @@ namespace Homing
 		{
 			change_direction_linVel(proj, dtime);
 
-			update_node_rotation(proj);
+			FenixUtils::Geom::Projectile::update_node_rotation(proj);
 
 #ifdef DEBUG
 			{
@@ -617,10 +568,10 @@ namespace Homing
 						alpha_max = alpha_max / 180.0f * 3.1415926f;
 
 						RE::NiPoint3 origin, caster_dir;
-						FenixUtils::Actor__get_eye_pos(a, origin, 2);
+						origin = FenixUtils::Geom::Actor::CalculateLOSLocation(a, FenixUtils::LineOfSightLocation::kHead);
 
 						const float circle_dist = 2000;
-						caster_dir = FenixUtils::rotate(1, a->data.angle);
+						caster_dir = FenixUtils::Geom::angles2dir(a->data.angle);
 
 						float circle_r = circle_dist * tan(alpha_max);
 						RE::NiPoint3 right_dir = RE::NiPoint3(0, 0, -1).UnitCross(caster_dir);
@@ -650,6 +601,13 @@ namespace Homing
 #endif  // DEBUG
 	}
 
+	std::vector<RE::Actor*> get_targets(uint32_t homingInd, RE::TESObjectREFR* caster, const RE::NiPoint3& origin_pos)
+	{
+		auto& homing_data = get_data(homingInd);
+		return homing_data.target == TargetTypes::Cursor ? Targeting::Cursor::get_cursor_targets(caster, homing_data) :
+		                                                   Targeting::get_nearest_targets(caster, origin_pos, homing_data);
+	}
+
 	void applyRotate(RE::Projectile* proj, uint32_t ind, RE::Actor* targetOverride)
 	{
 		auto caster = proj->shooter.get().get();
@@ -663,12 +621,15 @@ namespace Homing
 				targetOverride = Targeting::findTarget(proj, data);
 
 			if (targetOverride) {
-				auto dir = FenixUtils::rot_at(proj->GetPosition(), Targeting::get_victim_pos(targetOverride));
-
-				_generic_foo_<19362, void(RE::TESObjectREFR * refr, float rot_Z)>::eval(proj, dir.z);
-				_generic_foo_<19360, void(RE::TESObjectREFR * refr, float rot_X)>::eval(proj, dir.x);
-				proj->flags.reset(RE::Projectile::Flags::kAutoAim);
+				FenixUtils::Geom::Projectile::aimToPoint(proj, Targeting::AnticipatePos(targetOverride));
 			}
+		}
+	}
+
+	void disable(RE::Projectile* proj)
+	{
+		if (proj->IsMissileProjectile()) {
+			disable_homing(proj);
 		}
 	}
 
@@ -678,12 +639,11 @@ namespace Homing
 		if (!caster)
 			return;
 
-		if (proj->IsMissileProjectile()) {
-			set_homing_ind(proj, ind == static_cast<uint32_t>(-1) ? 0 : ind);
-		}
+		assert(ind > 0);
 
-		if (ind == static_cast<uint32_t>(-1))
-			return;
+		if (proj->IsMissileProjectile()) {
+			set_homing_ind(proj, ind);
+		}
 
 		auto& data = Storage::get_data(ind);
 
@@ -696,10 +656,10 @@ namespace Homing
 			return;
 
 		if (proj->IsBeamProjectile()) {
-			auto dir = FenixUtils::rot_at(proj->GetPosition(), Targeting::get_victim_pos(targetOverride));
+			auto dir = FenixUtils::Geom::rot_at(proj->GetPosition(), Targeting::AnticipatePos(targetOverride));
 
-			_generic_foo_<19362, void(RE::TESObjectREFR * refr, float rot_Z)>::eval(proj, dir.z);
-			_generic_foo_<19360, void(RE::TESObjectREFR * refr, float rot_X)>::eval(proj, dir.x);
+			FenixUtils::TESObjectREFR__SetAngleOnReferenceZ(proj, dir.z);
+			FenixUtils::TESObjectREFR__SetAngleOnReferenceX(proj, dir.x);
 		}
 	}
 

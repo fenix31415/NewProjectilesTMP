@@ -2,25 +2,6 @@
 
 namespace Positioning
 {
-	RE::NiPoint3 rotate(RE::NiPoint3 P, float alpha, const RE::NiPoint3& origin, const RE::NiPoint3& axis)
-	{
-		P -= origin;
-		float cos_phi = cos(alpha);
-		float sin_phi = sin(alpha);
-		float one_cos_phi = 1 - cos_phi;
-
-		RE::NiMatrix3 R = { { cos_phi + one_cos_phi * axis.x * axis.x, axis.x * axis.y * one_cos_phi - axis.z * sin_phi,
-								axis.x * axis.z * one_cos_phi + axis.y * sin_phi },
-			{ axis.y * axis.x * one_cos_phi + axis.z * sin_phi, cos_phi + axis.y * axis.y * one_cos_phi,
-				axis.y * axis.z * one_cos_phi - axis.x * sin_phi },
-			{ axis.z * axis.x * one_cos_phi - axis.y * sin_phi, axis.z * axis.y * one_cos_phi + axis.x * sin_phi,
-				cos_phi + axis.z * axis.z * one_cos_phi } };
-
-		P = R * P;
-		P += origin;
-		return P;
-	}
-
 	RE::NiPoint3 Pattern::GetPosition_Single(const Plane& plane, size_t) const { return plane.startPos; }
 	RE::NiPoint3 Pattern::GetPosition_Line(const Plane& plane, size_t ind) const
 	{
@@ -46,34 +27,39 @@ namespace Positioning
 		float alpha = 3.1415926f / (count - 1) * ind;
 		return plane.startPos + (plane.right_dir * cos(alpha) + plane.up_dir * sin(alpha)) * size;
 	}
-	RE::NiPoint3 Pattern::GetPosition_FillSquare(const Plane& plane, size_t ind) const
+	RE::NiPoint3 Pattern::GetPosition_FillSquare(const Plane& plane, size_t _ind) const
 	{
-		uint32_t h = (uint32_t)ceil(sqrt(count));
-
-		if (h == 1) {
-			return GetPosition_Line(plane, ind);
+		if (count == 1) {
+			return plane.startPos;
 		}
 
-		// TODO
-		return plane.startPos;
+		uint32_t m = static_cast<uint32_t>(sqrt(count));
+		uint32_t rest = count - m * m;
+		bool has_right = rest >= m;
+		bool has_up = rest != 0 && rest != m;
 
-		/*auto from = plane.startPos + plane.up_dir * (shape_params.size * 0.5f);
-				float d = shape_params.size / (h - 1);
+		uint32_t w = has_right ? m + 1 : m;
+		uint32_t h = has_up ? m + 1 : m;
 
-				ShapeParams params = { shape_params.size, h };
-				Pane cur_plane = plane;
-				while (shape_params.count >= h) {
-					cur_plane.startPos = from;
-					MultiCasters[(uint32_t)Shape::Line](params, cur_plane, cast_item);
-					from -= plane.up_dir * d;
-					shape_params.count -= h;
-				}
+		float dx = size / (w - 1);
+		float dy = h == 1 ? 0 : size / (h - 1);
 
-				if (shape_params.count > 0) {
-					cur_plane.startPos = from;
-					params.count = shape_params.count;
-					MultiCasters[(uint32_t)Shape::Line](params, cur_plane, cast_item);
-				}*/
+		uint32_t ind = _ind % count;
+
+		if (ind < w * m) {
+			uint32_t x = ind % w;
+			uint32_t y = ind / w;
+
+			auto from = plane.startPos - (plane.right_dir + plane.up_dir) * (size * 0.5f);
+			return from + plane.right_dir * (dx * x) + plane.up_dir * (dy * y);
+		} else {
+			ind -= w * m;
+			uint32_t up_size = rest >= m ? rest - m : rest;
+
+			uint32_t x = ind;
+			auto from = plane.startPos - plane.right_dir * ((up_size - 1) * 0.5f * dx) - plane.up_dir * (size * 0.5f - dy * m);
+			return from + plane.right_dir * (dx * x);
+		}
 	}
 	RE::NiPoint3 Pattern::GetPosition_FillCircle(const Plane& plane, size_t ind) const
 	{
@@ -83,16 +69,66 @@ namespace Positioning
 
 		return plane.startPos + (plane.right_dir * cos(alpha) + plane.up_dir * sin(alpha)) * r;
 	}
+	RE::NiPoint3 Pattern::GetPosition_FillHalfCircle(const Plane& plane, size_t ind) const
+	{
+		float c = size / sqrtf(static_cast<float>(count));
+		float alpha = 0.5f * 2.3999632297286533222f * ind;
+		const float pi = 3.141592653589793f;
+		while (alpha >= 2 * pi)
+			alpha -= 2 * pi;
+		if (alpha >= pi)
+			alpha = alpha - pi;
+		float r = c * sqrtf(static_cast<float>(ind));
+		return plane.startPos + (plane.right_dir * cos(alpha) + plane.up_dir * sin(alpha)) * r;
+	}
 	RE::NiPoint3 Pattern::GetPosition_Sphere(const Plane& plane, size_t ind) const
 	{
+		if (count == 1) {
+			return plane.startPos;
+		}
+
 		float c = size;
 		float phi = 3.883222077450933f;
-		ind += 1;
 		float y = 1 - (ind / (count - 1.0f)) * 2;
 		float radius = sqrt(1 - y * y);
 		float theta = phi * ind;
 		float x = cos(theta) * radius;
 		float z = sin(theta) * radius;
+
+		auto forward_dir = plane.up_dir.UnitCross(plane.right_dir);
+
+		return plane.startPos + (plane.right_dir * x + plane.up_dir * z + forward_dir * y) * c;
+	}
+	RE::NiPoint3 Pattern::GetPosition_HalfSphere(const Plane& plane, size_t ind) const
+	{
+		if (count == 1) {
+			return plane.startPos;
+		}
+
+		float c = size;
+		float phi = 3.883222077450933f;
+		float z = 1 - (ind / (count - 1.0f));
+		float radius = sqrt(1 - z * z);
+		float theta = phi * ind;
+		float x = cos(theta) * radius;
+		float y = sin(theta) * radius;
+
+		auto forward_dir = plane.up_dir.UnitCross(plane.right_dir);
+
+		return plane.startPos + (plane.right_dir * x + plane.up_dir * z + forward_dir * y) * c;
+	}
+	RE::NiPoint3 Pattern::GetPosition_Cylinder(const Plane& plane, size_t ind) const
+	{
+		if (count == 1) {
+			return plane.startPos;
+		}
+
+		float c = size;
+		float phi = 3.883222077450933f;
+		float y = 1 - (ind / (count - 1.0f)) * 2;
+		float theta = phi * ind;
+		float x = cos(theta);
+		float z = sin(theta);
 
 		auto forward_dir = plane.up_dir.UnitCross(plane.right_dir);
 

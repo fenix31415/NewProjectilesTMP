@@ -1,0 +1,96 @@
+{
+  "FormIDs": {
+    "key_spellLightning": "Skyrim.esm|0x45F9D",
+    "key_projFireball": "Skyrim.esm|0x10FBED"
+  },
+
+  "HomingData": {
+    "key_H_1": {
+      "type": "ConstSpeed",
+      "rotationTime": 1,
+      "aggressive": "Any"
+    }
+  },
+
+  "FollowersData": {
+    "key_F_1": {
+      "Pattern": {
+        "Figure": {
+          "shape": "Single"
+        },
+        "normal": [0, 1, 0],
+        "xDepends": false,
+        "posOffset": [0, 0, 100],
+        "origin": "NPC Spine [Spn0]"
+      },
+      "collision": "None",
+      "speed": 0
+    }
+  },
+
+  "MulticastSpawnGroups": {
+    "key_SP_1": {
+      "Pattern": {
+        "Figure": {
+          "shape": "Single"
+        }
+      }
+    }
+  },
+  "MulticastData": {
+    "key_MC_1": [
+      {
+        "spellID": "key_spellLightning",
+        "spawn_group": "key_SP_1",
+        "TriggerFunctions": {
+          "functions": [
+            {
+              "type": "SetHoming",
+              "id": "key_H_1"
+            }
+          ]
+        }
+      }
+    ]
+  },
+
+  "EmittersData": {
+    "key_E_1": {
+      "interval": 1,
+      "functions": [
+        {
+          "type": "TriggerFunctions",
+          "TriggerFunctions": {
+            "functions": [
+              {
+                "type": "ApplyMultiCast",
+                "id": "key_MC_1"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+
+  "Triggers": [
+    {
+      "event": "ProjAppeared",
+      "conditions": {
+        "ProjBaseIsFormID": "key_projFireball"
+      },
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "SetFollower",
+            "id": "key_F_1"
+          },
+          {
+            "type": "SetEmitter",
+            "id": "key_E_1"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -31,10 +31,10 @@ namespace Followers
 		float speed_mult;       // 0 for instant, default: 1
 
 		explicit Data(const Json::Value& item) :
-			pattern(item["Pattern"]), rounding(parse_enum_ifIsMember<Rounding::None>(item, "rounding"sv)),
-			rounding_radius(rounding != Rounding::None ? item["roundingR"].asFloat() : 0),
-			collision(parse_enum_ifIsMember<Collision::Actor>(item, "collision"sv)),
-			speed_mult(item.isMember("speed") ? item["speed"].asFloat() : 1)
+			pattern(item["Pattern"]), rounding(JsonUtils::mb_read_field<Rounding::None>(item, "rounding")),
+			rounding_radius(rounding != Rounding::None ? JsonUtils::getFloat(item, "roundingR") : 0),
+			collision(JsonUtils::mb_read_field<Collision::Actor>(item, "collision")),
+			speed_mult(JsonUtils::mb_getFloat<1.0f>(item, "speed"))
 		{}
 	};
 	static_assert(sizeof(Data) == 0x40);
@@ -66,7 +66,7 @@ namespace Followers
 	private:
 		static void read_json_entry(const std::string& key, const Json::Value& item)
 		{
-			uint32_t ind = keys.get(key);
+			[[maybe_unused]] uint32_t ind = keys.get(key);
 			assert(ind == data_static.size() + 1);
 
 			data_static.emplace_back(item);
@@ -89,38 +89,6 @@ namespace Followers
 
 	namespace Moving
 	{
-		// SkyrimSE.exe+74DC20
-		float get_proj_speed(RE::Projectile* proj) { return _generic_foo_<42958, decltype(get_proj_speed)>::eval(proj); }
-
-		void SetRotationMatrix(RE::NiMatrix3& a_matrix, float sacb, float cacb, float sb)
-		{
-			float cb = std::sqrtf(1 - sb * sb);
-			float ca = cacb / cb;
-			float sa = -sacb / cb;
-			a_matrix.entry[0][0] = ca;
-			a_matrix.entry[0][1] = sacb;
-			a_matrix.entry[0][2] = sa * sb;
-			a_matrix.entry[1][0] = sa;
-			a_matrix.entry[1][1] = cacb;
-			a_matrix.entry[1][2] = -ca * sb;
-			a_matrix.entry[2][0] = 0.0;
-			a_matrix.entry[2][1] = sb;
-			a_matrix.entry[2][2] = cb;
-		}
-
-		void update_node_rotation(RE::Projectile* proj, const RE::NiPoint3& proj_dir)
-		{
-			float x_angle = -asinf(proj_dir.z);
-			float z_angle = atan2(proj_dir.x, proj_dir.y);
-			while (z_angle < 0) z_angle += 2 * 3.1415926f;
-			// SetAngleX
-			_generic_foo_<19360, void(RE::TESObjectREFR * refr, float x)>::eval(proj, x_angle);
-			// SetAngleZ
-			_generic_foo_<19362, void(RE::TESObjectREFR * refr, float z)>::eval(proj, z_angle);
-
-			SetRotationMatrix(proj->Get3D2()->local.rotate, proj_dir.x, proj_dir.y, proj_dir.z);
-		}
-
 		auto get_target_point(RE::Projectile* proj)
 		{
 			auto& data = Storage::get_data(get_follower_ind(proj));
@@ -147,34 +115,6 @@ namespace Followers
 		const float CIRCLE_K = 0.01f;
 		const float CIRCLE_K_BIG = 1.0f + CIRCLE_K;
 		const float CIRCLE_K_SML = 1.0f - CIRCLE_K;
-
-		float get_rotation_angle(const RE::NiPoint3& proj_vel_cur, const RE::NiPoint3& proj_dir_final)
-		{
-			return acosf(std::min(1.0f, proj_vel_cur.Dot(proj_dir_final) / proj_vel_cur.Length()));
-		}
-
-		float clamp(float needed_angle, float max_alpha)
-		{
-			if (needed_angle >= 0)
-				return std::min(max_alpha, needed_angle);
-			else
-				return std::max(-max_alpha, needed_angle);
-		}
-
-		float is_clamped(float needed_angle, float max_alpha) { return needed_angle > -max_alpha && needed_angle < max_alpha; }
-
-		bool is_angle_small(float alpha) { return abs(alpha) < 0.001f; }
-
-		auto rotateVel(const RE::NiPoint3& proj_dir_cur, float max_alpha, const RE::NiPoint3& proj_dir_final)
-		{
-			float needed_angle = get_rotation_angle(proj_dir_cur, proj_dir_final);
-			if (!is_angle_small(needed_angle)) {
-				float phi = clamp(needed_angle, max_alpha);
-				return Positioning::rotate(proj_dir_cur, phi, { 0, 0, 0 }, proj_dir_cur.UnitCross(proj_dir_final));
-			} else {
-				return proj_dir_cur;
-			}
-		}
 
 		RE::NiPoint3 get_target_point_rounding_sphere(RE::Projectile* proj, RE::NiPoint3* dV)
 		{
@@ -211,7 +151,7 @@ namespace Followers
 				auto my_len = speed_origin * dtime;
 				float circle_len = my_len - len;
 				if (circle_len > 0) {
-					return Positioning::rotate(T3, circle_len / R, target_pos, cast_dir);
+					return FenixUtils::Geom::rotate(T3, circle_len / R, target_pos, cast_dir);
 				} else {
 					return V * my_len + proj->GetPosition();
 				}
@@ -219,18 +159,14 @@ namespace Followers
 				// Inside of circle
 				// Slightly rotate velocity to tangent
 
-				auto proj_dir_cur = proj->linearVelocity;
 				RE::NiPoint3 proj_dir_final = (proj->GetPosition() - target_pos).UnitCross(cast_dir);
 				if (proj_dir_final.Dot(proj->linearVelocity) < 0) {
 					proj_dir_final *= -1;
 				} else {
 				}
 
-				float needed_angle = get_rotation_angle(proj_dir_cur, proj_dir_final);
-				if (!is_angle_small(needed_angle)) {
-					float phi = clamp(needed_angle, dtime * speed_origin / R);
-					proj->linearVelocity = rotateVel(proj->linearVelocity, phi, proj_dir_final);
-				}
+				proj->linearVelocity =
+					FenixUtils::Geom::rotateVel(proj->linearVelocity, dtime * speed_origin / R, proj_dir_final);
 
 				return proj->GetPosition() + proj->linearVelocity * dtime;
 			} else {
@@ -246,7 +182,7 @@ namespace Followers
 				}
 
 				proj->linearVelocity = proj_dir_final * speed_origin;
-				return Positioning::rotate(proj->GetPosition(), phi, target_pos, cast_dir);
+				return FenixUtils::Geom::rotate(proj->GetPosition(), phi, target_pos, cast_dir);
 			}
 		}
 
@@ -287,7 +223,7 @@ namespace Followers
 				auto my_len = speed_origin * dtime;
 				float circle_len = my_len - len;
 				if (circle_len > 0) {
-					return Positioning::rotate(T3, circle_len / R, target_pos, cast_dir);
+					return FenixUtils::Geom::rotate(T3, circle_len / R, target_pos, cast_dir);
 				} else {
 					return V * my_len + proj->GetPosition();
 				}
@@ -295,17 +231,13 @@ namespace Followers
 				// Inside of cylinder
 				// Slightly rotate velocity to tangent
 
-				auto proj_dir_cur = proj->linearVelocity;
 				RE::NiPoint3 proj_dir_final = (proj->GetPosition() - target_pos).UnitCross(cast_dir);
 				if (proj_dir_final.Dot(proj->linearVelocity) < 0) {
 					proj_dir_final *= -1;
 				}
 
-				float needed_angle = get_rotation_angle(proj_dir_cur, proj_dir_final);
-				if (!is_angle_small(needed_angle)) {
-					float phi = clamp(needed_angle, dtime * speed_origin / R);
-					proj->linearVelocity = rotateVel(proj->linearVelocity, phi, proj_dir_final);
-				}
+				proj->linearVelocity =
+					FenixUtils::Geom::rotateVel(proj->linearVelocity, dtime * speed_origin / R, proj_dir_final);
 
 				return proj->GetPosition() + proj->linearVelocity * dtime;
 			} else {
@@ -327,7 +259,7 @@ namespace Followers
 				float df = dl / R;
 				if (P.Cross(vel) >= 0)
 					df *= -1;
-				auto ans = Positioning::rotate(proj->GetPosition(), df, target_pos, cast_dir);
+				auto ans = FenixUtils::Geom::rotate(proj->GetPosition(), df, target_pos, cast_dir);
 				if (dir_z < 0)
 					dh *= -1;
 				ans += cast_dir * dh;
@@ -339,23 +271,12 @@ namespace Followers
 		{
 			auto dir = target_pos - proj->GetPosition();
 			auto dist = dir.Unitize();
-			auto speed_origin = get_proj_speed(proj);
+			auto speed_origin = FenixUtils::Projectile__GetSpeed(proj);
 			auto speed_needed = dist * speed_mult;
 			float speed = std::min(speed_origin, speed_needed);
 			proj->linearVelocity = dir * speed;
 		}
 		
-		RE::NiPoint3 rotate_(float r, const RE::NiPoint3& angles)
-		{
-			RE::NiPoint3 ans;
-			ans.z = sinf(angles.x);
-			float y_x = tanf(angles.z);
-			
-			ans.x = sqrtf((1.0f - ans.z * ans.z) / (1.0f + y_x * y_x));
-			ans.y = ans.x * y_x;
-			return ans * r;
-		}
-
 		void change_direction(RE::Projectile* proj, RE::NiPoint3*, float dtime)
 		{
 			auto target_pos = get_target_point(proj);
@@ -379,23 +300,11 @@ namespace Followers
 			if (proj->linearVelocity.SqrLength() > 30.0f) {
 				proj_dir = proj->linearVelocity;
 			} else {
-				auto proj_dir_final = FenixUtils::rotate(1, proj->shooter.get().get()->data.angle);
-				auto proj_dir_cur = FenixUtils::rotate(1, proj->data.angle);
-
-				assert(proj->data.angle.x <= 3.1415927f / 2);
-				assert(proj->data.angle.x >= -3.1415927f / 2);
-				assert(proj->data.angle.z <= 3.1415927f * 2);
-				//assert(proj->data.angle.z >= 0);
-
-				float needed_angle = acos(proj_dir_cur.Dot(proj_dir_final));
-				float phi = fmin(data.speed_mult * dtime, needed_angle);
-				if (needed_angle >= 0.1f)
-					proj_dir = Positioning::rotate(proj_dir_cur, phi, { 0, 0, 0 }, proj_dir_cur.UnitCross(proj_dir_final));
-				else
-					proj_dir = proj_dir_cur;
+				auto proj_dir_final = FenixUtils::Geom::angles2dir(proj->shooter.get().get()->data.angle);
+				auto proj_dir_cur = FenixUtils::Geom::angles2dir(proj->data.angle);
+				proj_dir = FenixUtils::Geom::rotateVel(proj_dir_cur, data.speed_mult * dtime, proj_dir_final);
 			}
-			proj_dir.Unitize();
-			update_node_rotation(proj, proj_dir);
+			FenixUtils::Geom::Projectile::update_node_rotation(proj, proj_dir);
 		}
 
 		void change_direction_instant(RE::Projectile* proj, RE::NiPoint3* dV)
@@ -406,7 +315,7 @@ namespace Followers
 			RE::NiPoint3 proj_dir;
 			if (data.speed_mult == 0) {
 				P = get_target_point(proj);
-				proj_dir = FenixUtils::rotate(1, proj->shooter.get().get()->data.angle);
+				proj_dir = FenixUtils::Geom::angles2dir(proj->shooter.get().get()->data.angle);
 				proj_dir.Unitize();
 			} else if (data.rounding == Rounding::Sphere) {
 				P = get_target_point_rounding_sphere(proj, dV);
@@ -422,7 +331,7 @@ namespace Followers
 				proj->linearVelocity = proj_dir * proj->linearVelocity.Length();
 			}
 
-			update_node_rotation(proj, proj_dir);
+			FenixUtils::Geom::Projectile::update_node_rotation(proj, proj_dir);
 			*dV = P - proj->GetPosition();
 		}
 	}
@@ -569,7 +478,7 @@ namespace Followers
 			{
 				return GetCollisionLayer(proj, _MissileImpale__GetCollisionLayer(bproj));
 			}
-
+			
 			using func_t = RE::COL_LAYER(RE::BGSProjectile*);
 			static inline REL::Relocation<func_t> _InitHavok__GetCollisionLayer;
 			static inline REL::Relocation<func_t> _TargetPick__GetCollisionLayer;
@@ -605,7 +514,7 @@ namespace Followers
 		return ans.begin() == ans.end() ? -1 : *ans.begin();
 	}
 
-	forEachRes forEachFollower(RE::Actor* a, const RE::BSTArray<RE::ProjectileHandle>& arr,
+	forEachRes forEachFollower(RE::TESObjectREFR* a, const RE::BSTArray<RE::ProjectileHandle>& arr,
 		const forEachF& func)
 	{
 		for (auto& i : arr) {
@@ -619,7 +528,7 @@ namespace Followers
 		return forEachRes::kContinue;
 	}
 
-	void forEachFollower(RE::Actor* a, const forEachF& func)
+	void forEachFollower(RE::TESObjectREFR* a, const forEachF& func)
 	{
 		auto manager = RE::Projectile::Manager::GetSingleton();
 		if (forEachFollower(a, manager->limited, func) == forEachRes::kStop)
@@ -630,21 +539,37 @@ namespace Followers
 			return;
 	}
 
-	void onCreated(RE::Projectile* proj, uint32_t ind)
+	void disable(RE::Projectile* proj, bool restore_speed)
+	{
+		if (is_follower(proj)) {
+			if (restore_speed) {
+				auto& data = Storage::get_data(get_follower_ind(proj));
+				if (data.rounding == Followers::Rounding::None) {
+					float speed = FenixUtils::Projectile__GetSpeed(proj);
+					proj->linearVelocity *= speed / proj->linearVelocity.Length();
+				}
+			}
+			FenixUtils::Projectile__set_collision_layer(proj, RE::COL_LAYER::kSpell);
+			disable_follower(proj);
+		}
+	}
+
+	void apply(RE::Projectile* proj, uint32_t ind)
 	{
 		if (proj->IsMissileProjectile() && proj->shooter.get().get() && proj->shooter.get().get()->As<RE::Actor>()) {
-			ind = ind == static_cast<uint32_t>(-1) ? 0 : ind;
+			assert(ind > 0);
+			
 			set_follower_ind(proj, ind);
-			if (ind) {
-				auto& data = Storage::get_data(ind);
 
-				if (!data.pattern.isShapeless()) {
-					auto new_ind = get_unused_shape_ind(proj);
-					if (new_ind == -1 || new_ind >= Storage::get_data(ind).pattern.getSize())
-						new_ind = 0;
+			auto& data = Storage::get_data(ind);
 
-					set_follower_shape_ind(proj, new_ind);
-				}
+			if (!data.pattern.isShapeless()) {
+				// TODO: optimize for MC
+				auto new_ind = get_unused_shape_ind(proj);
+				if (new_ind == -1 || new_ind >= Storage::get_data(ind).pattern.getSize())
+					new_ind = 0;
+
+				set_follower_shape_ind(proj, new_ind);
 			}
 		}
 	}
@@ -653,7 +578,7 @@ namespace Followers
 	{
 		using namespace Hooks;
 		FollowingHook::Hook();
-		NoCollisionHook ::Hook();
+		NoCollisionHook::Hook();
 	}
 
 	void init(const Json::Value& json_root)

@@ -7,7 +7,6 @@
   "dependencies": [
     "boost-atomic",
     "boost-stl-interfaces",
-    "fmt",
     "glm",
 		"jsoncpp",
 		"magic-enum",

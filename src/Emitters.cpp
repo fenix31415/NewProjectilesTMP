@@ -28,13 +28,13 @@ namespace Emitters
 
 		explicit FunctionData(const Json::Value& function)
 		{
-			Type type = parse_enum<FunctionData::Type::TriggerFunctions>(function["type"].asString());
+			Type type = JsonUtils::read_enum<Type>(function, "type");
 			switch (type) {
-			case FunctionData::Type::AccelerateToMaxSpeed:
-				data = SpeedData{ parse_enum<SpeedData::SpeedChangeTypes::Linear>(function["speedType"].asString()),
-					function["time"].asFloat() };
+			case Type::AccelerateToMaxSpeed:
+				data = SpeedData{ JsonUtils::read_enum<SpeedData::SpeedChangeTypes>(function, "speedType"),
+					JsonUtils::getFloat(function, "time") };
 				break;
-			case FunctionData::Type::TriggerFunctions:
+			case Type::TriggerFunctions:
 				data = TriggerFunctions::Functions(function["TriggerFunctions"]);
 				break;
 			default:
@@ -81,14 +81,14 @@ namespace Emitters
 	private:
 		static void read_json_entry(const std::string& key, const Json::Value& item)
 		{
-			uint32_t ind = keys.get(key);
+			[[maybe_unused]] uint32_t ind = keys.get(key);
 			assert(ind == data_static.size() + 1);
 
 			const auto& functions = item["functions"];
 
-			data_static.emplace_back(std::vector<FunctionData>(), item["interval"].asFloat(),
-				parse_enum_ifIsMember<false>(item, "limited"sv), parse_enum_ifIsMember<1u>(item, "count"sv),
-				parse_enum_ifIsMember<false>(item, "destroyAfter"sv));
+			data_static.emplace_back(std::vector<FunctionData>(), JsonUtils::getFloat(item, "interval"),
+				JsonUtils::mb_read_field<false>(item, "limited"), JsonUtils::mb_read_field<1u>(item, "count"),
+				JsonUtils::mb_read_field<false>(item, "destroyAfter"));
 
 			auto& new_functions = data_static.back().functions;
 			for (size_t i = 0; i < functions.size(); i++) {
@@ -127,22 +127,25 @@ namespace Emitters
 	bool is_emitter(RE::Projectile* proj) { return get_emitter_ind(proj) != 0; }
 	void disable_emitter(RE::Projectile* proj) { set_emitter_ind(proj, 0); }
 
-	void onCreated(RE::Projectile* proj, uint32_t ind)
+	void disable(RE::Projectile* proj)
 	{
 		if (proj->IsMissileProjectile()) {
-			set_emitter_ind(proj, ind == static_cast<uint32_t>(-1) ? 0 : ind);
-			if (is_emitter(proj)) {
-				auto emitter_ind = get_emitter_ind(proj);
-				auto& data = Storage::get_data(emitter_ind);
-				if (data.limited) {
-					set_emitter_rest(proj, data.count);
-				}
-			}
+			disable_emitter(proj);
 		}
 	}
 
-	// SkyrimSE.exe+74DC20
-	float get_proj_speed(RE::Projectile* proj) { return _generic_foo_<42958, decltype(get_proj_speed)>::eval(proj); }
+	void apply(RE::Projectile* proj, uint32_t ind)
+	{
+		if (proj->IsMissileProjectile()) {
+			assert(ind > 0);
+			set_emitter_ind(proj, ind);
+			auto emitter_ind = get_emitter_ind(proj);
+			auto& data = Storage::get_data(emitter_ind);
+			if (data.limited) {
+				set_emitter_rest(proj, data.count);
+			}
+		}
+	}
 
 	void onUpdate(RE::Projectile* proj, float dtime)
 	{
@@ -175,7 +178,7 @@ namespace Emitters
 					//float new_speed = cur_speed * add_to_speed;
 					//proj->linearVelocity *= (new_speed / cur_speed);
 
-					float max_speed = get_proj_speed(proj);
+					float max_speed = FenixUtils::Projectile__GetSpeed(proj);
 					float cur_speed = proj->linearVelocity.Length();
 					if (cur_speed < max_speed) {
 						auto& function_speed = std::get<SpeedData>(function.data);

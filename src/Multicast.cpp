@@ -45,10 +45,10 @@ namespace Multicast
 		uint32_t rotation_target: 27;  // 48:05 used if rotation == ToTarget
 
 		SpawnGroupData(const Json::Value& item) :
-			pattern(item["Pattern"]), rot(parse_enum_ifIsMember<LaunchDir::Parallel>(item, "rotation")),
-			sound(parse_enum_ifIsMember<SoundType::Single>(item, "sound")), pos_rnd(JsonUtils::readOrDefault3(item, "posRnd"sv)),
-			rot_offset(JsonUtils::readOrDefault2(item, "rotOffset"sv)), rot_rnd(JsonUtils::readOrDefault2(item, "rotRnd"sv)),
-			rotation_target(rot == LaunchDir::ToTarget ? Homing::get_key_ind(item["rotationTarget"].asString()) : 0)
+			pattern(item["Pattern"]), rot(JsonUtils::mb_read_field<LaunchDir::Parallel>(item, "rotation")),
+			sound(JsonUtils::mb_read_field<SoundType::Single>(item, "sound")), pos_rnd(JsonUtils::mb_getPoint3(item, "posRnd")),
+			rot_offset(JsonUtils::mb_getPoint2(item, "rotOffset")), rot_rnd(JsonUtils::mb_getPoint2(item, "rotRnd")),
+			rotation_target(rot == LaunchDir::ToTarget ? Homing::get_key_ind(JsonUtils::getString(item, "rotationTarget")) : 0)
 		{}
 	};
 	static_assert(sizeof(SpawnGroupData) == 0x50);
@@ -80,7 +80,7 @@ namespace Multicast
 	private:
 		static void read_json_entry(const std::string& key, const Json::Value& item)
 		{
-			uint32_t ind = keys.get(key);
+			[[maybe_unused]] uint32_t ind = keys.get(key);
 			assert(ind == data.size() + 1);
 
 			data.emplace_back(item);
@@ -107,9 +107,9 @@ namespace Multicast
 	{
 		std::variant<SpellData, ArrowData> data;
 
-		static uint32_t currentOrID(const Json::Value& item, std::string_view field)
+		static uint32_t currentOrID(const Json::Value& item, const std::string& field)
 		{
-			auto spellID = item[field.data()].asString();
+			auto spellID = JsonUtils::getString(item, field);
 			if (spellID == "Current")
 				return CURRENT;
 			else
@@ -168,7 +168,7 @@ namespace Multicast
 	private:
 		static void read_json_entry(const std::string& key, const Json::Value& item)
 		{
-			uint32_t ind = keys.get(key);
+			[[maybe_unused]] uint32_t ind = keys.get(key);
 			assert(ind == data.size() + 1);
 
 			data.push_back(std::vector<Data>());
@@ -188,15 +188,15 @@ namespace Multicast
 				origin_formIDs.data = SpellData{};
 				auto& spelldata = std::get<SpellData>(origin_formIDs.data);
 
-				spelldata.spellID = SpellArrowData::currentOrID(item, "spellID"sv);
+				spelldata.spellID = SpellArrowData::currentOrID(item, "spellID");
 			} else if (item.isMember("weapID")) {
 				origin_formIDs.data = ArrowData{};
 				auto& arrowdata = std::get<ArrowData>(origin_formIDs.data);
 
-				arrowdata.weapID = SpellArrowData::currentOrID(item, "weapID"sv);
+				arrowdata.weapID = SpellArrowData::currentOrID(item, "weapID");
 
 				if (item.isMember("arrowID")) {
-					arrowdata.arrowID = SpellArrowData::currentOrID(item, "arrowID"sv);
+					arrowdata.arrowID = SpellArrowData::currentOrID(item, "arrowID");
 				} else {
 					arrowdata.arrowID = SpellArrowData::CURRENT;
 				}
@@ -206,14 +206,14 @@ namespace Multicast
 
 			TriggerFunctions::Functions functions;
 			HomingDetectionType homing_detection =
-				parse_enum_ifIsMember<HomingDetectionType::Individual>(item, "HomingDetection"sv);
+				JsonUtils::mb_read_field<HomingDetectionType::Individual>(item, "HomingDetection");
 
 			if (item.isMember("TriggerFunctions")) {
 				functions = TriggerFunctions::Functions(item["TriggerFunctions"]);
 			}
 
 			auto pattern_ind = SpawnGroupStorage::get_key_ind(item["spawn_group"].asString());
-			auto call_triggers = parse_enum_ifIsMember<false>(item, "callTriggers"sv);
+			auto call_triggers = JsonUtils::mb_read_field<false>(item, "callTriggers");
 
 			new_data.emplace_back(origin_formIDs, functions, pattern_ind, homing_detection, call_triggers);
 		}
@@ -284,13 +284,6 @@ namespace Multicast
 			std::variant<SpellData, ArrowData> spellarrow_data;
 		};
 
-		RE::NiPoint3 rotate(RE::NiPoint3 normal, ProjectileRot parallel_rot, bool dependsX)
-		{
-			RE::NiMatrix3 M;
-			M.EulerAnglesToAxesZXY(dependsX ? parallel_rot.x : 0, 0, parallel_rot.z);
-			return M * normal;
-		}
-
 		namespace Rotation
 		{
 			float add_rot_x(float val, float d)
@@ -324,64 +317,38 @@ namespace Multicast
 
 			auto add_rot_rnd(ProjectileRot rot, ProjectileRot rnd)
 			{
+				using FenixUtils::Random::FloatNeg1To1;
+
 				if (rnd.x == 0 && rnd.z == 0)
 					return rot;
 
-				rot.x = add_rot_x(rot.x, rnd.x * FenixUtils::random_range(-1.0f, 1.0f));
-				rot.z = add_rot_z(rot.z, rnd.z * FenixUtils::random_range(-1.0f, 1.0f));
+				rot.x = add_rot_x(rot.x, rnd.x * FloatNeg1To1());
+				rot.z = add_rot_z(rot.z, rnd.z * FloatNeg1To1());
 				return rot;
 			}
 
 			auto add_point_rnd(const RE::NiPoint3& rnd)
 			{
-				using FenixUtils::random_range;
+				using FenixUtils::Random::FloatNeg1To1;
 
 				if (rnd.x == 0 && rnd.y == 0 && rnd.z == 0)
 					return RE::NiPoint3{ 0, 0, 0 };
 
-				return RE::NiPoint3{ rnd.x * random_range(-1.0f, 1.0f), rnd.y * random_range(-1.0f, 1.0f),
-					rnd.z * random_range(-1.0f, 1.0f) };
-			}
-
-			// get point `caster` is looking at
-			auto raycast(RE::Actor* caster)
-			{
-				auto havokWorldScale = RE::bhkWorld::GetWorldScale();
-				RE::bhkPickData pick_data;
-				RE::NiPoint3 ray_start, ray_end;
-
-				FenixUtils::Actor__get_eye_pos(caster, ray_start, 2);
-				ray_end = ray_start + FenixUtils::rotate(20000, caster->data.angle);
-				pick_data.rayInput.from = ray_start * havokWorldScale;
-				pick_data.rayInput.to = ray_end * havokWorldScale;
-
-				uint32_t collisionFilterInfo = 0;
-				caster->GetCollisionFilterInfo(collisionFilterInfo);
-				pick_data.rayInput.filterInfo = (static_cast<uint32_t>(collisionFilterInfo >> 16) << 16) |
-				                                static_cast<uint32_t>(RE::COL_LAYER::kCharController);
-
-				caster->GetParentCell()->GetbhkWorld()->PickObject(pick_data);
-				RE::NiPoint3 hitpos;
-				if (pick_data.rayOutput.HasHit()) {
-					hitpos = ray_start + (ray_end - ray_start) * pick_data.rayOutput.hitFraction;
-				} else {
-					hitpos = ray_end;
-				}
-				return hitpos;
+				return RE::NiPoint3{ rnd.x * FloatNeg1To1(), rnd.y * FloatNeg1To1(), rnd.z * FloatNeg1To1() };
 			}
 		}
 
 		auto get_SPItem_rot(LaunchDir rot, const RE::NiPoint3& item_pos, const RE::NiPoint3& SP_center,
 			const RE::NiPoint3& cast_dir, RE::TESObjectREFR* caster, RE::TESObjectREFR* target)
 		{
-			using FenixUtils::rot_at;
+			using FenixUtils::Geom::rot_at;
 
 			switch (rot) {
 			case LaunchDir::ToTarget:
 				{
 					if (target)
 						return rot_at(item_pos, target->As<RE::Actor>() ?
-													Homing::Targeting::get_victim_pos(target->As<RE::Actor>()) :
+													FenixUtils::Geom::Actor::AnticipatePos(target->As<RE::Actor>()) :
 													target->GetPosition());
 					else
 						break;
@@ -392,7 +359,7 @@ namespace Multicast
 				return rot_at(item_pos, SP_center);
 			case LaunchDir::ToSight:
 				if (caster->As<RE::Actor>())
-					return rot_at(item_pos, Rotation::raycast(caster->As<RE::Actor>()));
+					return rot_at(item_pos, FenixUtils::Geom::Actor::raycast(caster->As<RE::Actor>()));
 				else
 					break;
 			case LaunchDir::Parallel:
@@ -421,7 +388,7 @@ namespace Multicast
 			item_rot = Rotation::add_rot_rnd(item_rot, pattern_data.rot_rnd);
 
 			RE::NiPoint3 rnd_offset = Rotation::add_point_rnd(pattern_data.pos_rnd);
-			rnd_offset = rotate(rnd_offset, SP_CD.parallel_rot, pattern_data.pattern.xDepends());
+			rnd_offset = pattern_data.pattern.rotateDependsX(rnd_offset, SP_CD.parallel_rot);
 			pos += rnd_offset;
 
 			auto type = SP_CD.spellarrow_data.index();
@@ -517,11 +484,8 @@ namespace Multicast
 
 				assert(homingInd);
 				if (homingInd) {
-					auto& homing_data = Homing::get_data(homingInd);
-					targets = homing_data.target == Homing::TargetTypes::Cursor ?
-					              Homing::Targeting::Cursor::get_cursor_targets(caster, homing_data) :
-					              Homing::Targeting::get_nearest_targets(caster, SP_CD.start_pos, homing_data);
-					
+					targets = Homing::get_targets(homingInd, caster, SP_CD.start_pos);
+
 					std::random_device rd;
 					std::mt19937 g(rd());
 					std::shuffle(targets.begin(), targets.end(), g);
@@ -562,57 +526,7 @@ namespace Multicast
 			}
 		}
 	}
-	/*
-	// TODO: remove
-	void onCreated(RE::Projectile* proj, uint32_t ind)
-	{
-		using namespace Casting;
-
-		CastData current_CD;
-		current_CD.start_pos = proj->GetPosition();
-		current_CD.parallel_rot = { proj->GetAngleX(), proj->GetAngleZ() };
-		if (auto weap = proj->weaponSource) {
-			current_CD.spellarrow_data = CastData::ArrowData{};
-			auto& arrow_data = std::get<CastData::ArrowData>(current_CD.spellarrow_data);
-			arrow_data.weap = weap;
-			arrow_data.ammo = proj->ammoSource;
-		} else {
-			current_CD.spellarrow_data = CastData::SpellData{};
-			auto& spell_data = std::get<CastData::SpellData>(current_CD.spellarrow_data);
-			spell_data.spel = proj->spell;
-		}
-
-		auto& data = Storage::get_data(ind);
-		for (const auto& spawn_data : data) {
-			multiCastGroup(current_CD, spawn_data, proj, proj->shooter.get().get());
-		}
-	}
-
-	// TODO: remove
-	void onCreated(Ldata* ldata, uint32_t ind)
-	{
-		using namespace Casting;
-
-		CastData current_CD;
-		current_CD.start_pos = ldata->pos;
-		current_CD.parallel_rot = ldata->rot;
-		if (auto weap = ldata->weaponSource) {
-			current_CD.spellarrow_data = CastData::ArrowData{};
-			auto& arrow_data = std::get<CastData::ArrowData>(current_CD.spellarrow_data);
-			arrow_data.weap = weap;
-			arrow_data.ammo = ldata->ammoSource;
-		} else {
-			current_CD.spellarrow_data = CastData::SpellData{};
-			auto& spell_data = std::get<CastData::SpellData>(current_CD.spellarrow_data);
-			spell_data.spel = ldata->spell;
-		}
-
-		auto& data = Storage::get_data(ind);
-		for (const auto& spawn_data : data) {
-			multiCastGroup(current_CD, spawn_data, ldata->shooter, ldata->shooter);
-		}
-	}
-	*/
+	
 	void apply(Triggers::Data* ldata, uint32_t ind)
 	{
 		using namespace Casting;

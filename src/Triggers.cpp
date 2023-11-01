@@ -89,7 +89,7 @@ namespace Triggers
 		bool eval_WeaponHasKwd(RE::TESObjectWEAP* weap) const { return weap && weap->HasKeywordID(formid); }
 
 	public:
-		Condition(const std::string& type_name, const Json::Value& val) : type(parse_enum<Type::CasterIsFormID>(type_name))
+		Condition(const std::string& type_name, const Json::Value& val) : type(JsonUtils::string2enum<Type>(type_name))
 		{
 			switch (type) {
 				break;
@@ -108,7 +108,7 @@ namespace Triggers
 				formid = JsonUtils::get_formid(val.asString());
 				break;
 			case Type::Hand:
-				hand = parse_enum<Hand::Both>(val.asString());
+				hand = JsonUtils::read_enum<Hand>(val.asString());
 				break;
 			default:
 				assert(false);
@@ -209,8 +209,7 @@ namespace Triggers
 			for (size_t i = 0; i < json_triggers.size(); i++) {
 				auto& trigger = json_triggers[(int)i];
 
-				auto type = parse_enum<Event::Total>(trigger["event"].asString());
-				assert(type != Event::Total);
+				auto type = JsonUtils::read_enum<Event>(trigger, "event");
 				triggers[(uint32_t)type].emplace_back(trigger);
 			}
 		}
@@ -351,7 +350,7 @@ namespace Triggers
 				
 				Data data(weapitem ? weapitem->object->As<RE::TESObjectWEAP>() : nullptr, attacker, nullptr, nullptr, nullptr, nullptr,
 					left ? RE::MagicSystem::CastingSource::kLeftHand : RE::MagicSystem::CastingSource::kRightHand,
-					Data::Type::None, FenixUtils::rot_at(hitdata->hitDirection), hitdata->hitPosition);
+					Data::Type::None, FenixUtils::Geom::rot_at(hitdata->hitDirection), hitdata->hitPosition);
 				
 				eval(&data, Event::HitMelee, nullptr);
 				data.shooter = victim;
@@ -364,7 +363,7 @@ namespace Triggers
 
 				Data data(hitdata->weapon, attacker, proj->GetProjectileBase(), proj->spell, nullptr, proj->ammoSource,
 					proj->castingSource, proj->ammoSource ? Data::Type::Arrow : Data::Type::Spell,
-					FenixUtils::rot_at(hitdata->hitDirection), hitdata->hitPosition);
+					FenixUtils::Geom::rot_at(hitdata->hitDirection), hitdata->hitPosition);
 
 				eval(&data, Event::HitProjectile, nullptr);
 				data.shooter = victim;
