@@ -58,13 +58,12 @@
       "TriggerFunctions": {
         "functions": [
           {
-            "type": "SetRotation",
+            "type": "SetRotationHoming",
             "id": "key_H_1",
             "on_followers": true
           },
           {
-            "type": "SetFollower",
-            "id": "Disable",
+            "type": "DisableFollower",
             "on_followers": true
           }
         ]

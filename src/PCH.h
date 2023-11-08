@@ -1,9 +1,12 @@
 #pragma once
 
-#define DEBUG
+//#define DEBUG
 
+#pragma warning(push)
+#pragma warning(disable: 4702)
 #include "RE/Skyrim.h"
 #include "SKSE/SKSE.h"
+#pragma warning(pop)
 
 #pragma warning(push)
 #ifdef DEBUG
