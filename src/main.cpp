@@ -54,26 +54,74 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 #include "Emitters.h"
 #include "Followers.h"
 
+#include <nlohmann/json-schema.hpp>
+
+bool validate(const std::string path)
+{
+	std::ifstream f("Data/HomingProjectilesSchema/schema.json");
+	nlohmann::json schema;
+	f >> schema;
+
+	f = std::ifstream(path);
+	nlohmann::json document;
+	f >> document;
+
+	nlohmann::json_schema::json_validator validator;
+	validator.set_root_schema(schema);
+	try {
+		validator.validate(document);
+		return true;
+	} catch (const std::exception& e) {
+		logger::error("Validation failed, here is why: {}\n", e.what());
+		return false;
+	}
+}
+
 void read_json()
 {
-	Json::Value json_root;
-	std::ifstream ifs;
-	ifs.open("Data/HomingProjectiles/HomieSpells.json");
-	ifs >> json_root;
-	ifs.close();
+	JsonUtils::FormIDsMap::clear();
 
-	JsonUtils::FormIDsMap::init(json_root);
+	Homing::clear();
+	Multicast::clear();
+	Emitters::clear();
+	Followers::clear();
 
-	Homing::init_keys(json_root);
-	Multicast::init_keys(json_root);
-	Emitters::init_keys(json_root);
-	Followers::init_keys(json_root);
+	Triggers::clear();
 
-	Homing::init(json_root);
-	Multicast::init(json_root);
-	Emitters::init(json_root);
-	Followers::init(json_root);
-	Triggers::init(json_root);
+	namespace fs = std::filesystem;
+	for (const auto& entry : fs::directory_iterator("Data/HomingProjectiles")) {
+		Json::Value json_root;
+		std::ifstream ifs;
+		if (entry.path().extension() == ".json") {
+			if (validate(entry.path().string())) {
+				ifs.open(entry);
+				ifs >> json_root;
+				ifs.close();
+
+				auto filename = entry.path().filename().string();
+
+				JsonUtils::FormIDsMap::init(filename, json_root);
+
+				Homing::init_keys(filename, json_root);
+				Multicast::init_keys(filename, json_root);
+				Emitters::init_keys(filename, json_root);
+				Followers::init_keys(filename, json_root);
+
+				Homing::init(filename, json_root);
+				Multicast::init(filename, json_root);
+				Emitters::init(filename, json_root);
+				Followers::init(filename, json_root);
+
+				Triggers::init(filename, json_root);
+			}
+		}
+	}
+
+	// Used only while reading json
+	Homing::clear_keys();
+	Multicast::clear_keys();
+	Emitters::clear_keys();
+	Followers::clear_keys();
 }
 
 void reset_json()
@@ -131,8 +179,11 @@ private:
 static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 {
 	switch (message->type) {
-	case SKSE::MessagingInterface::kDataLoaded:
+	case SKSE::MessagingInterface::kPostLoad:
 		Hooks::PaddingsProjectileHook::Hook();
+		break;
+
+	case SKSE::MessagingInterface::kDataLoaded:
 		Hooks::MultipleBeamsHook::Hook();
 		Hooks::NormLightingsHook::Hook();
 		Triggers::install();

@@ -15,6 +15,9 @@ namespace Triggers
 		Cast,
 		EffectStart,
 		EffectEnd,
+		ProjDestroyed,
+		ProjHits,
+		ProjImpact,
 
 		Total  // for std::array
 	};
@@ -40,14 +43,15 @@ namespace Triggers
 		RE::NiPoint3 pos;
 
 		Data(Type type, RE::Projectile::LaunchData* ldata) :
-			weap(ldata->weaponSource), shooter(ldata->shooter), bproj(ldata->projectileBase), spel(ldata->spell), mgef(nullptr),
+			weap(ldata->weaponSource), shooter(ldata->shooter), bproj(ldata->projectileBase), spel(ldata->spell),
+			mgef((ldata->spell && ldata->spell->As<RE::SpellItem>()) ? ldata->spell->GetAVEffect() : nullptr),
 			ammo(ldata->ammoSource), hand(ldata->castingSource), type(type), rot({ ldata->angleX, ldata->angleZ }),
 			pos(ldata->origin)
 		{}
 
 		explicit Data(RE::Projectile* proj) :
 			weap(proj->weaponSource), shooter(proj->shooter.get().get()), bproj(proj->GetProjectileBase()), spel(proj->spell),
-			mgef(nullptr), ammo(proj->ammoSource), hand(proj->castingSource),
+			mgef(proj->spell ? proj->spell->GetAVEffect() : nullptr), ammo(proj->ammoSource), hand(proj->castingSource),
 			type(proj->weaponSource ? Type::Arrow : (proj->spell ? Type::Spell : Type::None)),
 			rot({ proj->GetAngleX(), proj->GetAngleZ() }), pos(proj->GetPosition())
 		{}
@@ -61,7 +65,8 @@ namespace Triggers
 		{}
 	};
 
-	void init(const Json::Value& json_root);
+	void init(const std::string& filename, const Json::Value& json_root);
+	void clear();
 	
 	// targetOverride used only for Multicast::Evenly support
 	void eval(Data* data, Event e, RE::Projectile* proj, RE::Actor* targetOverride = nullptr);

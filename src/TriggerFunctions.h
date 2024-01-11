@@ -41,7 +41,8 @@ namespace TriggerFunctions
 			float value;
 
 			NumberFunctionData() : type(NumberFunctions::Add), value(0) {}
-			NumberFunctionData(const Json::Value& data);
+			explicit NumberFunctionData(const Json::Value& data);
+			explicit NumberFunctionData(const RE::NiPoint3& linVel);  // For ChangeSpeed (triggers only on 3dLoaded)
 
 			float apply(float& val) const
 			{
@@ -84,28 +85,28 @@ namespace TriggerFunctions
 		void eval_ApplyMultiCast(Triggers::Data* data) const;
 
 		void eval_impl(Triggers::Data* data, RE::Projectile* proj, RE::Actor* targetOverride = nullptr) const;
+
 	public:
 		void eval(Triggers::Data* data, RE::Projectile* proj, RE::Actor* targetOverride = nullptr) const;
 		uint32_t get_homing_ind(bool rotation) const;
 
 		Function() : type(Type::ChangeSpeed), numb() {}
-		Function(const Json::Value& function);
+		explicit Function(const std::string& filename, const Json::Value& function);
+		explicit Function(const RE::NiPoint3& linVel);  // For ChangeSpeed (triggers only on 3dLoaded)
 	};
 
 	struct Functions
 	{
 	private:
 		std::vector<Function> functions;
-		Function changeSpeed;
 		uint32_t disable_origin: 1;
-		uint32_t changeSpeedPresent: 1;
 
 	public:
 		Functions() = default;
-		explicit Functions(const Json::Value& json_TriggerFunctions);
+		explicit Functions(const std::string& filename, const Json::Value& json_TriggerFunctions);
 
 		void call(RE::Projectile* proj, RE::Actor* targetOverride = nullptr) const;
-		void call(Triggers::Data* data, RE::Projectile* proj, RE::Actor* targetOverride, bool change_speedOnly = false) const;
+		void call(Triggers::Data* data, RE::Projectile* proj, RE::Actor* targetOverride) const;
 
 		uint32_t get_homing_ind(bool rotation) const;
 

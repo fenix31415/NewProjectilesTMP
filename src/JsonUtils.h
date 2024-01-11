@@ -10,19 +10,20 @@ namespace JsonUtils
 {
 	using namespace FenixUtils::Json;
 
-	uint32_t get_formid(const std::string& name);
+	uint32_t get_formid(const std::string& filename, const std::string& name);
 
 	class FormIDsMap
 	{
 		static inline std::unordered_map<std::string, uint32_t> formIDs;
 
 	public:
-		static void init(const Json::Value& json_root);
+		static void init(const std::string& filename, const Json::Value& json_root);
+		static void clear();
 
 		// `key` must present and starts with "key_"
-		static auto get(std::string key)
+		static auto get(const std::string& filename, const std::string& key)
 		{
-			auto found = formIDs.find(key);
+			auto found = formIDs.find(filename + key);
 			assert(found != formIDs.end());
 			return found->second;
 		}
@@ -34,22 +35,23 @@ namespace JsonUtils
 		std::unordered_map<std::string, uint32_t> keys;
 
 	public:
-		void init() { keys.clear(); }
+		void clear() { keys.clear(); }
 
 		// `key` must present and starts with "key_"
-		auto get(const std::string& key)
+		auto get(const std::string& filename, const std::string& key)
 		{
-			auto found = keys.find(key);
+			auto found = keys.find(filename + key);
 			assert(found != keys.end());
 			return (*found).second;
 		}
 
-		uint32_t add(const std::string& key)
+		uint32_t add(const std::string& filename, const std::string& key)
 		{
-			auto found = keys.find(key);
+			auto finalkey = filename + key;
+			auto found = keys.find(finalkey);
 			assert(found == keys.end());
 			uint32_t new_key = static_cast<uint32_t>(keys.size()) + 1;
-			keys.insert({ key, new_key });
+			keys.insert({ finalkey, new_key });
 			return new_key;
 		}
 	};

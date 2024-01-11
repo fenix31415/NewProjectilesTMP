@@ -41,44 +41,53 @@ namespace Followers
 
 	struct Storage
 	{
-		static void init(const Json::Value& HomingData)
+		static void clear_keys()
 		{
+			keys.clear();
+		}
+		static void clear()
+		{
+			clear_keys();
 			data_static.clear();
+		}
 
+		static void init(const std::string& filename, const Json::Value& HomingData)
+		{
 			for (auto& key : HomingData.getMemberNames()) {
-				read_json_entry(key, HomingData[key]);
+				read_json_entry(filename, key, HomingData[key]);
 			}
 		}
 
-		static void init_keys(const Json::Value& HomingData)
+		static void init_keys(const std::string& filename, const Json::Value& HomingData)
 		{
-			keys.init();
-
 			for (auto& key : HomingData.getMemberNames()) {
-				read_json_entry_keys(key, HomingData[key]);
+				read_json_entry_keys(filename, key, HomingData[key]);
 			}
 		}
 
 		static const auto& get_data(uint32_t ind) { return data_static[ind - 1]; }
 
-		static uint32_t get_key_ind(const std::string& key) { return keys.get(key); }
+		static uint32_t get_key_ind(const std::string& filename, const std::string& key) { return keys.get(filename, key); }
 
 	private:
-		static void read_json_entry(const std::string& key, const Json::Value& item)
+		static void read_json_entry(const std::string& filename, const std::string& key, const Json::Value& item)
 		{
-			[[maybe_unused]] uint32_t ind = keys.get(key);
+			[[maybe_unused]] uint32_t ind = keys.get(filename, key);
 			assert(ind == data_static.size() + 1);
 
 			data_static.emplace_back(item);
 		}
 
-		static void read_json_entry_keys(const std::string& key, const Json::Value&) { keys.add(key); }
+		static void read_json_entry_keys(const std::string& filename, const std::string& key, const Json::Value&)
+		{
+			keys.add(filename, key);
+		}
 
 		static inline JsonUtils::KeysMap keys;
 		static inline std::vector<Data> data_static;
 	};
 
-	uint32_t get_key_ind(const std::string& key) { return Storage::get_key_ind(key); }
+	uint32_t get_key_ind(const std::string& filename, const std::string& key) { return Storage::get_key_ind(filename, key); }
 
 	void set_follower_ind(RE::Projectile* proj, uint32_t ind) { ::set_follower_ind(proj, ind); }
 	uint32_t get_follower_ind(RE::Projectile* proj) { return ::get_follower_ind(proj); }
@@ -305,6 +314,7 @@ namespace Followers
 				proj_dir = FenixUtils::Geom::rotateVel(proj_dir_cur, data.speed_mult * dtime, proj_dir_final);
 			}
 			FenixUtils::Geom::Projectile::update_node_rotation(proj, proj_dir);
+			
 		}
 
 		void change_direction_instant(RE::Projectile* proj, RE::NiPoint3* dV)
@@ -464,7 +474,9 @@ namespace Followers
 
 			static RE::COL_LAYER InitHavok__GetCollisionLayer(RE::BGSProjectile* bproj, RE::Projectile* proj)
 			{
-				return GetCollisionLayer(proj, _InitHavok__GetCollisionLayer(bproj));
+				auto origin = _InitHavok__GetCollisionLayer(bproj);
+				logger::info("OK");
+				return GetCollisionLayer(proj, origin);
 			}
 			static RE::COL_LAYER TargetPick__GetCollisionLayer(RE::BGSProjectile* bproj, RE::Projectile* proj)
 			{
@@ -581,17 +593,20 @@ namespace Followers
 		NoCollisionHook::Hook();
 	}
 
-	void init(const Json::Value& json_root)
+	void clear_keys() { Storage::clear_keys(); }
+	void clear() { Storage::clear(); }
+
+	void init(const std::string& filename, const Json::Value& json_root)
 	{
 		if (json_root.isMember("FollowersData")) {
-			Storage::init(json_root["FollowersData"]);
+			Storage::init(filename, json_root["FollowersData"]);
 		}
 	}
 
-	void init_keys(const Json::Value& json_root)
+	void init_keys(const std::string& filename, const Json::Value& json_root)
 	{
 		if (json_root.isMember("FollowersData")) {
-			Storage::init_keys(json_root["FollowersData"]);
+			Storage::init_keys(filename, json_root["FollowersData"]);
 		}
 	}
 }

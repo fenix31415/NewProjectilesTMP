@@ -419,7 +419,7 @@
       "properties": {
         "event": {
           "description": "An event that triggers this trigger",
-          "enum": ["ProjAppeared", "Swing", "HitMelee", "HitByMelee", "HitProjectile", "HitByProjectile", "Cast", "EffectStart", "EffectEnd"]
+          "enum": ["ProjAppeared", "Swing", "HitMelee", "HitByMelee", "HitProjectile", "HitByProjectile", "Cast", "EffectStart", "EffectEnd", "ProjDestroyed", "ProjHits", "ProjImpact"]
         },
         "conditions": {
           "type": "object",
@@ -475,7 +475,7 @@
         "TriggerFunctions": { "$ref": "#/$defs/TriggerFunctions" }
       },
       "additionalProperties": false,
-      "required": ["event", "TriggerFunctions", "conditions"]
+      "required": ["event", "TriggerFunctions"]
     },
     "Triggers": {
       "description": "Configure triggers that applies new type for proj",

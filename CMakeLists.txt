@@ -82,6 +82,7 @@ endif ()
 
 find_package(spdlog REQUIRED CONFIG)
 find_package(jsoncpp REQUIRED CONFIG)
+find_package(nlohmann_json_schema_validator REQUIRED)
 
 # ---- Add source files ----
 
@@ -154,6 +155,7 @@ target_link_libraries(
 		CommonLibSSE::CommonLibSSE
 		spdlog::spdlog
 		JsonCpp::JsonCpp
+		nlohmann_json_schema_validator
 )
 
 if (DEFINED UseUselessUtils AND UseUselessUtils)
@@ -226,5 +228,6 @@ target_precompile_headers(
 
 add_custom_command(
 	TARGET ${PROJECT_NAME} POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> "e:/MO2_Data/mods/NewProjectilesTMP/skse/plugins/"
+	COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:${PROJECT_NAME}> "e:/MO2_Data/mods/NewProjectilesTMP/skse/plugins/"
+	COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_PDB_FILE:${PROJECT_NAME}> "e:/MO2_Data/mods/NewProjectilesTMP/skse/plugins/"
 )

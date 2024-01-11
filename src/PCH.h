@@ -1,6 +1,6 @@
 #pragma once
 
-//#define DEBUG
+#define DEBUG
 
 #pragma warning(push)
 #pragma warning(disable: 4702)

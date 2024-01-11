@@ -14,6 +14,12 @@ namespace TriggerFunctions
 		type(JsonUtils::read_enum<NumberFunctions>(data, "type")), value(JsonUtils::getFloat(data, "value"))
 	{}
 
+	Function::NumberFunctionData::NumberFunctionData(const RE::NiPoint3& linVel)
+	{
+		memcpy(&type, &linVel.y, 4);
+		value = linVel.z;
+	}
+
 	void Function::eval_SetRotationHoming(RE::Projectile* proj, RE::Actor* targetOverride) const
 	{
 		Homing::applyRotate(proj, ind, targetOverride);
@@ -35,9 +41,17 @@ namespace TriggerFunctions
 	void Function::eval_DisableFollower(RE::Projectile* proj) const { Followers::disable(proj, restore_speed); }
 	void Function::eval_ChangeSpeed(RE::Projectile* proj) const
 	{
-		float cur_speed = proj->linearVelocity.Length();
-		float old_speed = numb.apply(cur_speed);
-		proj->linearVelocity *= cur_speed / old_speed;
+		if (!proj->flags.any(RE::Projectile::Flags::kInited)) {
+			assert(proj->linearVelocity.Length() == 0);
+
+			proj->linearVelocity.x = 3.14f;
+			memcpy(&proj->linearVelocity.y, &numb.type, 4);
+			proj->linearVelocity.z = numb.value;
+		} else {
+			float cur_speed = proj->linearVelocity.Length();
+			float old_speed = numb.apply(cur_speed);
+			proj->linearVelocity *= cur_speed / old_speed;
+		}
 	}
 	void Function::eval_ChangeRange(RE::Projectile* proj) const { numb.apply(proj->range); }
 	void Function::eval_ApplyMultiCast(Triggers::Data* data) const { Multicast::apply(data, ind); }
@@ -112,26 +126,26 @@ namespace TriggerFunctions
 		return 0;
 	}
 
-	Function::Function(const Json::Value& function) :
+	Function::Function(const std::string& filename, const Json::Value& function) :
 		type(JsonUtils::read_enum<Type>(function, "type")), on_follower(JsonUtils::mb_read_field<false>(function, "on_followers"))
 	{
 		switch (type) {
 		case Type::SetRotationToSight:
 			break;
 		case Type::SetRotationHoming:
-			ind = Homing::get_key_ind(JsonUtils::getString(function, "id"));
+			ind = Homing::get_key_ind(filename, JsonUtils::getString(function, "id"));
 			break;
 		case Type::SetHoming:
-			ind = Homing::get_key_ind(JsonUtils::getString(function, "id"));
+			ind = Homing::get_key_ind(filename, JsonUtils::getString(function, "id"));
 			break;
 		case Type::SetEmitter:
-			ind = Emitters::get_key_ind(JsonUtils::getString(function, "id"));
+			ind = Emitters::get_key_ind(filename, JsonUtils::getString(function, "id"));
 			break;
 		case Type::SetFollower:
-			ind = Followers::get_key_ind(JsonUtils::getString(function, "id"));
+			ind = Followers::get_key_ind(filename, JsonUtils::getString(function, "id"));
 			break;
 		case Type::ApplyMultiCast:
-			ind = Multicast::get_key_ind(JsonUtils::getString(function, "id"));
+			ind = Multicast::get_key_ind(filename, JsonUtils::getString(function, "id"));
 			break;
 		case Type::ChangeSpeed:
 		case Type::ChangeRange:
@@ -149,32 +163,25 @@ namespace TriggerFunctions
 		}
 	}
 
-	Functions::Functions(const Json::Value& json_TriggerFunctions) :
-		disable_origin(JsonUtils::mb_read_field<false>(json_TriggerFunctions, "disableOrigin")), changeSpeedPresent(false),
-		changeSpeed()
+	Function::Function(const RE::NiPoint3& linVel) : type(Type::ChangeSpeed), on_follower(false)
+	{
+		assert(linVel.x == 3.14f);
+		numb = NumberFunctionData(linVel);
+	}
+
+	Functions::Functions(const std::string& filename, const Json::Value& json_TriggerFunctions) :
+		disable_origin(JsonUtils::mb_read_field<false>(json_TriggerFunctions, "disableOrigin"))
 	{
 		const auto& json_functions = json_TriggerFunctions["functions"];
 		for (size_t i = 0; i < json_functions.size(); i++) {
-			const auto& function = json_functions[(int)i];
-			auto type = JsonUtils::read_enum<Function::Type>(function, "type");
-			if (type == Function::Type::ChangeSpeed) {
-				changeSpeedPresent = true;
-				changeSpeed = Function(function);
-			} else {
-				functions.emplace_back(function);
-			}
+			functions.emplace_back(filename, json_functions[(int)i]);
 		}
 	}
 
-	void Functions::call(Triggers::Data* data, RE::Projectile* proj, RE::Actor* targetOverride, bool change_speedOnly) const
+	void Functions::call(Triggers::Data* data, RE::Projectile* proj, RE::Actor* targetOverride) const
 	{
-		if (change_speedOnly) {
-			if (changeSpeedPresent)
-				changeSpeed.eval(data, proj);
-		} else {
-			for (auto& func : functions) {
-				func.eval(data, proj, targetOverride);
-			}
+		for (auto& func : functions) {
+			func.eval(data, proj, targetOverride);
 		}
 	}
 

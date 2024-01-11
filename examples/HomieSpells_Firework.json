@@ -1,0 +1,265 @@
+{
+  "FormIDs": {
+    "key_spellFireball": "Skyrim.esm|0x1C789",
+    "key_spellLightning": "Skyrim.esm|0x45F9D",
+    "key_spellIceSpear": "Skyrim.esm|0x10F7EC",
+
+    "key_projIceSpike": "Skyrim.esm|0x2F774",
+    "key_projIceSpear": "Skyrim.esm|0x10FBEE",
+    "key_projFireball": "Skyrim.esm|0x10FBED"
+  },
+
+  "HomingData": {
+    "key_H_R": {
+      "type": "ConstSpeed",
+      "rotationTime": 1
+    }
+  },
+
+  "MulticastSpawnGroups": {
+    "key_SP_sphere": {
+      "rotation": "FromCenter",
+      "Pattern": {
+        "Figure": {
+          "count": 70,
+          "shape": "Sphere",
+          "size": 10
+        }
+      }
+    },
+    "key_SP_fire": {
+      "rotOffset": [-90,0],
+      "rotRnd": [20,20],
+      "Pattern": {
+        "Figure": {
+          "shape": "Single"
+        },
+        "normal": [0,0,1],
+        "xDepends": true
+      }
+    }
+  },
+
+  "MulticastData": {
+    "key_MC_explosion1": [
+      {
+        "spellID": "key_spellFireball",
+        "spawn_group": "key_SP_sphere",
+        "TriggerFunctions": {
+          "functions": [
+            {
+              "type": "ChangeRange",
+              "data": {
+                "type": "Mul",
+                "value": 0.5
+              }
+            },
+            {
+              "type": "ChangeSpeed",
+              "data": {
+                "type": "Mul",
+                "value": 0.5
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "key_MC_explosion2": [
+      {
+        "spellID": "key_spellLightning",
+        "spawn_group": "key_SP_sphere",
+        "TriggerFunctions": {
+          "functions": [
+            {
+              "type": "ChangeRange",
+              "data": {
+                "type": "Mul",
+                "value": 0.5
+              }
+            },
+            {
+              "type": "ChangeSpeed",
+              "data": {
+                "type": "Mul",
+                "value": 0.5
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "key_MC_fire1": [
+      {
+        "spellID": "key_spellIceSpear",
+        "spawn_group": "key_SP_fire",
+        "TriggerFunctions": {
+          "functions": [
+            {
+              "type": "SetEmitter",
+              "id": "key_EM_rocket1"
+            }
+          ]
+        }
+      }
+    ],
+    "key_MC_fire2": [
+      {
+        "spellID": "key_spellIceSpear",
+        "spawn_group": "key_SP_fire",
+        "TriggerFunctions": {
+          "functions": [
+            {
+              "type": "SetEmitter",
+              "id": "key_EM_rocket2"
+            }
+          ]
+        }
+      }
+    ]
+  },
+
+  "EmittersData": {
+    "key_EM_rocket1": {
+      "destroyAfter": true,
+      "interval": 0.5,
+      "limited": true,
+      "functions": [
+        {
+          "type": "TriggerFunctions",
+          "TriggerFunctions": {
+            "functions": [
+              {
+                "type": "ApplyMultiCast",
+                "id": "key_MC_explosion1"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "key_EM_rocket2": {
+      "destroyAfter": true,
+      "interval": 0.5,
+      "limited": true,
+      "functions": [
+        {
+          "type": "TriggerFunctions",
+          "TriggerFunctions": {
+            "functions": [
+              {
+                "type": "ApplyMultiCast",
+                "id": "key_MC_explosion2"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "key_EM_firework1": {
+      "count": 5,
+      "destroyAfter": true,
+      "interval": 1,
+      "limited": true,
+      "functions": [
+        {
+          "type": "TriggerFunctions",
+          "TriggerFunctions": {
+            "functions": [
+              {
+                "type": "ApplyMultiCast",
+                "id": "key_MC_fire1"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "key_EM_firework2": {
+      "count": 5,
+      "destroyAfter": true,
+      "interval": 1,
+      "limited": true,
+      "functions": [
+        {
+          "type": "TriggerFunctions",
+          "TriggerFunctions": {
+            "functions": [
+              {
+                "type": "ApplyMultiCast",
+                "id": "key_MC_fire2"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+
+  "FollowersData": {
+    "key_F_firework": {
+      "collision": "None",
+      "Pattern": {
+        "Figure": {
+          "count": 5,
+          "shape": "Line",
+          "size": 1000
+        },
+        "normal": [0,0,1],
+        "planeRotate": 90,
+        "xDepends": false,
+        "posOffset": [0,4000,100]
+      },
+      "speed": 0
+    }
+  },
+
+  "Triggers": [
+    {
+      "event": "ProjAppeared",
+      "conditions": { "ProjBaseIsFormID": "key_projIceSpear" },
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "SetEmitter",
+            "id": "key_EM_firework1"
+          },
+          {
+            "type": "SetFollower",
+            "id": "key_F_firework"
+          },
+          {
+            "type": "ChangeRange",
+            "data": {
+              "type": "Mul",
+              "value": 10
+            }
+          }
+        ]
+      }
+    },
+    {
+      "event": "ProjAppeared",
+      "conditions": { "ProjBaseIsFormID": "key_projIceSpike" },
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "SetEmitter",
+            "id": "key_EM_firework2"
+          },
+          {
+            "type": "SetFollower",
+            "id": "key_F_firework"
+          },
+          {
+            "type": "ChangeRange",
+            "data": {
+              "type": "Mul",
+              "value": 10
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -89,7 +89,8 @@ namespace Triggers
 		bool eval_WeaponHasKwd(RE::TESObjectWEAP* weap) const { return weap && weap->HasKeywordID(formid); }
 
 	public:
-		Condition(const std::string& type_name, const Json::Value& val) : type(JsonUtils::string2enum<Type>(type_name))
+		Condition(const std::string& filename, const std::string& type_name, const Json::Value& val) :
+			type(JsonUtils::string2enum<Type>(type_name))
 		{
 			switch (type) {
 				break;
@@ -105,7 +106,7 @@ namespace Triggers
 			case Type::CasterHasKwd:
 			case Type::WeaponBaseIsFormID:
 			case Type::WeaponHasKwd:
-				formid = JsonUtils::get_formid(val.asString());
+				formid = JsonUtils::get_formid(filename, val.asString());
 				break;
 			case Type::Hand:
 				hand = JsonUtils::read_enum<Hand>(val.asString());
@@ -159,9 +160,9 @@ namespace Triggers
 		std::vector<Condition> conditions;
 		TriggerFunctions::Functions functions;
 
-		void call_functions(Data* data, RE::Projectile* proj, RE::Actor* targetOverride, bool change_speedOnly) const
+		void call_functions(Data* data, RE::Projectile* proj, RE::Actor* targetOverride) const
 		{
-			functions.call(data, proj, targetOverride, change_speedOnly);
+			functions.call(data, proj, targetOverride);
 		}
 
 		bool call_conditions(Data* data) const
@@ -174,18 +175,21 @@ namespace Triggers
 		}
 
 	public:
-		explicit Trigger(const Json::Value& json_trigger) : functions(json_trigger["TriggerFunctions"])
+		Trigger(const std::string& filename, const Json::Value& json_trigger) :
+			functions(filename, json_trigger["TriggerFunctions"])
 		{
-			auto& json_conditions = json_trigger["conditions"];
-			for (const auto& condition : json_conditions.getMemberNames()) {
-				conditions.emplace_back(condition, json_conditions[condition]);
+			if (json_trigger.isMember("conditions")) {
+				auto& json_conditions = json_trigger["conditions"];
+				for (const auto& condition : json_conditions.getMemberNames()) {
+					conditions.emplace_back(filename, condition, json_conditions[condition]);
+				}
 			}
 		}
 
-		void eval(Data* data, RE::Projectile* proj, RE::Actor* targetOverride, bool change_speedOnly) const
+		void eval(Data* data, RE::Projectile* proj, RE::Actor* targetOverride) const
 		{
 			if (call_conditions(data))
-				call_functions(data, proj, targetOverride, change_speedOnly);
+				call_functions(data, proj, targetOverride);
 		}
 
 		bool should_disable_origin(Data* data) const { return call_conditions(data) && functions.should_disable_origin(); }
@@ -195,29 +199,28 @@ namespace Triggers
 	{
 		static inline std::array<std::vector<Trigger>, (uint32_t)Event::Total> triggers;
 
-		static void clear() {
+	public:
+		static void clear()
+		{
 			for (auto& cur_triggers : triggers) {
 				cur_triggers.clear();
 			}
 		}
 
-	public:
-		static void init(const Json::Value& json_triggers)
+		static void init(const std::string& filename, const Json::Value& json_triggers)
 		{
-			clear();
-
 			for (size_t i = 0; i < json_triggers.size(); i++) {
 				auto& trigger = json_triggers[(int)i];
 
 				auto type = JsonUtils::read_enum<Event>(trigger, "event");
-				triggers[(uint32_t)type].emplace_back(trigger);
+				triggers[(uint32_t)type].emplace_back(filename, trigger);
 			}
 		}
 
-		static void eval(Data* data, Event e, RE::Projectile* proj, RE::Actor* targetOverride, bool change_speedOnly = false)
+		static void eval(Data* data, Event e, RE::Projectile* proj, RE::Actor* targetOverride)
 		{
 			for (const auto& trigger : triggers[(uint32_t)e]) {
-				trigger.eval(data, proj, targetOverride, change_speedOnly);
+				trigger.eval(data, proj, targetOverride);
 			}
 		}
 
@@ -233,7 +236,9 @@ namespace Triggers
 		}
 	};
 
-	void init(const Json::Value& json_root) { return Triggers::init(json_root["Triggers"]); }
+	void clear() { Triggers::clear(); }
+
+	void init(const std::string& filename, const Json::Value& json_root) { return Triggers::init(filename, json_root["Triggers"]); }
 
 	void eval(Data* data, Event e, RE::Projectile* proj, RE::Actor* targetOverride)
 	{
@@ -247,45 +252,61 @@ namespace Triggers
 		public:
 			static void Hook()
 			{
+				auto& trmp = SKSE::GetTrampoline();
+
 				// arrow->unk140 = 0i64; with arrow=nullptr
 				FenixUtils::writebytes<17693, 0xefa>("\x0F\x1F\x80\x00\x00\x00\x00"sv);
 				// SkyrimSE.exe+2360C2 -- TESObjectWEAP::Fire_140235240
-				_LaunchArrow = SKSE::GetTrampoline().write_call<5>(REL::ID(17693).address() + 0xe82, LaunchArrow);
+				_LaunchArrow = trmp.write_call<5>(REL::ID(17693).address() + 0xe82, LaunchArrow);
 
 				// 1405504F5 -- MagicCaster::FireProjectileFromSource
-				_FireProjectile1 = SKSE::GetTrampoline().write_call<5>(REL::ID(33670).address() + 0x575, FireProjectile1);
+				_FireProjectile1 = trmp.write_call<5>(REL::ID(33670).address() + 0x575, FireProjectile1);
 				// SkyrimSE.exe+5504F5 -- MagicCaster::FireProjectile_0
-				_FireProjectile2 = SKSE::GetTrampoline().write_call<5>(REL::ID(33671).address() + 0x125, FireProjectile2);
+				_FireProjectile2 = trmp.write_call<5>(REL::ID(33671).address() + 0x125, FireProjectile2);
 
 				// 140628dd7 Actor::CombatHit
-				_InitializeHitData = SKSE::GetTrampoline().write_call<5>(REL::ID(37673).address() + 0x1b7, InitializeHitData);
+				_InitializeHitData = trmp.write_call<5>(REL::ID(37673).address() + 0x1b7, InitializeHitData);
 
 				// 140628dc8 Actor::CombatHit
-				_InitializeHitDataProj =
-					SKSE::GetTrampoline().write_call<5>(REL::ID(37673).address() + 0x1a8, InitializeHitDataProj);
+				_InitializeHitDataProj = trmp.write_call<5>(REL::ID(37673).address() + 0x1a8, InitializeHitDataProj);
 
 				// 1407211ea HitFrameHandler::Handle
-				_DoMeleeAttack = SKSE::GetTrampoline().write_call<5>(REL::ID(41747).address() + 0x3a, DoMeleeAttack);
+				_DoMeleeAttack = trmp.write_call<5>(REL::ID(41747).address() + 0x3a, DoMeleeAttack);
 
-				// 1407211ea Actor::MagicTarget::AddTarget
-				_AddTarget = SKSE::GetTrampoline().write_call<5>(REL::ID(37832).address() + 0x8e, AddTarget);
+				// 14063311e Actor::MagicTarget::AddTarget
+				_AddTarget = trmp.write_call<5>(REL::ID(37832).address() + 0x8e, AddTarget);
 
 				// 140550a37 MagicCaster::FireProjectile
-				_Launch1 = SKSE::GetTrampoline().write_call<5>(REL::ID(33672).address() + 0x377, Launch1);
+				_Launch1 = trmp.write_call<5>(REL::ID(33672).address() + 0x377, Launch1);
 
 				// 140550a37 TESObjectWEAP::Fire
-				_Launch2 = SKSE::GetTrampoline().write_call<5>(REL::ID(17693).address() + 0xe82, Launch2);
+				_Launch2 = trmp.write_call<5>(REL::ID(17693).address() + 0xe82, Launch2);
 
-				_CalcVelocityVector = SKSE::GetTrampoline().write_call<5>(REL::ID(43030).address() + 0x3b8,
-					CalcVelocityVector);  // SkyrimSE.exe+754bd8
+				// SkyrimSE.exe+754bd8
+				_CalcVelocityVector = trmp.write_call<5>(REL::ID(43030).address() + 0x3b8, CalcVelocityVector);
+
+				// SkyrimSE.exe+74bc21 Proj::Kill
+				_ClearFollowedObject = trmp.write_call<5>(REL::ID(42930).address() + 0x21, ClearFollowedObject);
+
+				_HandleHits1 = REL::Relocation<uintptr_t>(RE::VTABLE_MissileProjectile[0]).write_vfunc(0xBE, HandleHits1);
+				_HandleHits2 = REL::Relocation<uintptr_t>(RE::VTABLE_FlameProjectile[0]).write_vfunc(0xBE, HandleHits2);
+				_HandleHits3 = REL::Relocation<uintptr_t>(RE::VTABLE_ConeProjectile[0]).write_vfunc(0xBE, HandleHits3);
+				_HandleHits4 = REL::Relocation<uintptr_t>(RE::VTABLE_BeamProjectile[0]).write_vfunc(0xBE, HandleHits4);
+				_HandleHits5 = REL::Relocation<uintptr_t>(RE::VTABLE_ArrowProjectile[0]).write_vfunc(0xBE, HandleHits5);
+
+				// SkyrimSE.exe+7478cc MissileProj::AddImpact
+				_AddImpact1 = trmp.write_call<5>(REL::ID(42866).address() + 0xbc, AddImpact1);
+				// SkyrimSE.exe+735b06 ConeProj::AddImpact
+				_AddImpact2 = trmp.write_call<5>(REL::ID(42633).address() + 0x66, AddImpact2);
 			}
 
 		private:
 			static bool FireProjectile1(RE::MagicCaster* a, RE::BGSProjectile* bproj, RE::TESObjectREFR* a_char,
 				RE::CombatController* a4, RE::NiPoint3* startPos, float rotationZ, float rotationX, uint32_t area, void* a9)
 			{
-				Data data(nullptr, a->GetCasterAsActor(), bproj, a->currentSpell, nullptr, nullptr, a->GetCastingSource(),
-					Data::Type::Spell, { rotationX, rotationZ }, *startPos);
+				Data data(nullptr, a->GetCasterAsActor(), bproj, a->currentSpell,
+					a->currentSpell ? a->currentSpell->GetAVEffect() : nullptr, nullptr, a->GetCastingSource(), Data::Type::Spell,
+					{ rotationX, rotationZ }, *startPos);
 
 				if (Triggers::should_disable_origin(&data)) {
 					eval(&data, Event::ProjAppeared, nullptr);
@@ -297,8 +318,9 @@ namespace Triggers
 			static bool FireProjectile2(RE::MagicCaster* a, RE::BGSProjectile* bproj, RE::TESObjectREFR* a_char,
 				RE::CombatController* a4, RE::NiPoint3* startPos, float rotationZ, float rotationX, uint32_t area, void* a9)
 			{
-				Data data(nullptr, a->GetCasterAsActor(), bproj, a->currentSpell, nullptr, nullptr, a->GetCastingSource(),
-					Data::Type::Spell, { rotationX, rotationZ }, *startPos);
+				Data data(nullptr, a->GetCasterAsActor(), bproj, a->currentSpell,
+					a->currentSpell ? a->currentSpell->GetAVEffect() : nullptr, nullptr, a->GetCastingSource(), Data::Type::Spell,
+					{ rotationX, rotationZ }, *startPos);
 
 				if (Triggers::should_disable_origin(&data)) {
 					eval(&data, Event::ProjAppeared, nullptr);
@@ -347,11 +369,11 @@ namespace Triggers
 				RE::InventoryEntryData* weapitem, bool left)
 			{
 				_InitializeHitData(hitdata, attacker, victim, weapitem, left);
-				
-				Data data(weapitem ? weapitem->object->As<RE::TESObjectWEAP>() : nullptr, attacker, nullptr, nullptr, nullptr, nullptr,
-					left ? RE::MagicSystem::CastingSource::kLeftHand : RE::MagicSystem::CastingSource::kRightHand,
+
+				Data data(weapitem ? weapitem->object->As<RE::TESObjectWEAP>() : nullptr, attacker, nullptr, nullptr, nullptr,
+					nullptr, left ? RE::MagicSystem::CastingSource::kLeftHand : RE::MagicSystem::CastingSource::kRightHand,
 					Data::Type::None, FenixUtils::Geom::rot_at(hitdata->hitDirection), hitdata->hitPosition);
-				
+
 				eval(&data, Event::HitMelee, nullptr);
 				data.shooter = victim;
 				eval(&data, Event::HitByMelee, nullptr);
@@ -396,7 +418,7 @@ namespace Triggers
 				Data data(weap, a, nullptr, nullptr, nullptr, nullptr,
 					left ? RE::MagicSystem::CastingSource::kLeftHand : RE::MagicSystem::CastingSource::kRightHand,
 					Data::Type::None, { a->GetAimAngle(), a->GetAimHeading() }, std::move(pos));
-				
+
 				eval(&data, Event::Swing, nullptr);
 			}
 
@@ -416,14 +438,89 @@ namespace Triggers
 					return false;
 				}
 			}
-			
+
 			static void CalcVelocityVector(RE::Projectile* proj)
 			{
-				_CalcVelocityVector(proj);
-				Data data(proj);
-				Triggers::eval(&data, Event::ProjAppeared, proj, nullptr, true);
+				if (proj->linearVelocity.Length() != 0) {
+					TriggerFunctions::Function changeVel(proj->linearVelocity);
+					_CalcVelocityVector(proj);
+					Data data(proj);
+					changeVel.eval(&data, proj);
+				} else {
+					_CalcVelocityVector(proj);
+				}
 			}
 
+			static void ClearFollowedObject(RE::BSSoundHandle* shandle)
+			{
+				auto proj = (RE::Projectile*)((char*)shandle - 0x128);
+
+				Data data(proj);
+				eval(&data, Event::ProjDestroyed, nullptr);
+
+				_ClearFollowedObject(shandle);
+			}
+
+			static bool OnHandleHits(RE::Projectile* proj, bool ans)
+			{
+				if (ans) {
+					Data data(proj);
+					eval(&data, Event::ProjHits, nullptr);
+				}
+				return ans;
+			}
+
+			static bool HandleHits1(RE::Projectile* proj, void* collector)
+			{
+				return OnHandleHits(proj, _HandleHits1(proj, collector));
+			}
+			static bool HandleHits2(RE::Projectile* proj, void* collector)
+			{
+				return OnHandleHits(proj, _HandleHits2(proj, collector));
+			}
+			static bool HandleHits3(RE::Projectile* proj, void* collector)
+			{
+				return OnHandleHits(proj, _HandleHits3(proj, collector));
+			}
+			static bool HandleHits4(RE::Projectile* proj, void* collector)
+			{
+				return OnHandleHits(proj, _HandleHits4(proj, collector));
+			}
+			static bool HandleHits5(RE::Projectile* proj, void* collector)
+			{
+				return OnHandleHits(proj, _HandleHits5(proj, collector));
+			}
+
+			static void* OnAddImpact(RE::Projectile* proj, void* ans, RE::NiPoint3& targetLoc)
+			{
+				if (ans) {
+					Data data(proj);
+					data.pos = targetLoc;
+					eval(&data, Event::ProjImpact, nullptr);
+				}
+				return ans;
+			}
+			static void* AddImpact1(RE::Projectile* proj, RE::TESObjectREFR* refr, RE::NiPoint3& targetLoc,
+				RE::NiPoint3* velocity_or_normal, RE::hkpCollidable* collidable, uint32_t shape_key, bool hit_happend)
+			{
+				return OnAddImpact(proj,
+					_AddImpact1(proj, refr, targetLoc, velocity_or_normal, collidable, shape_key, hit_happend), targetLoc);
+			}
+			static void* AddImpact2(RE::Projectile* proj, RE::TESObjectREFR* refr, RE::NiPoint3& targetLoc,
+				RE::NiPoint3* velocity_or_normal, RE::hkpCollidable* collidable, uint32_t shape_key, bool hit_happend)
+			{
+				return OnAddImpact(proj,
+					_AddImpact2(proj, refr, targetLoc, velocity_or_normal, collidable, shape_key, hit_happend), targetLoc);
+			}
+
+			static inline REL::Relocation<decltype(AddImpact1)> _AddImpact1;
+			static inline REL::Relocation<decltype(AddImpact2)> _AddImpact2;
+			static inline REL::Relocation<decltype(HandleHits1)> _HandleHits1;
+			static inline REL::Relocation<decltype(HandleHits2)> _HandleHits2;
+			static inline REL::Relocation<decltype(HandleHits3)> _HandleHits3;
+			static inline REL::Relocation<decltype(HandleHits4)> _HandleHits4;
+			static inline REL::Relocation<decltype(HandleHits5)> _HandleHits5;
+			static inline REL::Relocation<decltype(ClearFollowedObject)> _ClearFollowedObject;
 			static inline REL::Relocation<decltype(CalcVelocityVector)> _CalcVelocityVector;
 			static inline REL::Relocation<decltype(InitializeHitData)> _InitializeHitData;
 			static inline REL::Relocation<decltype(InitializeHitDataProj)> _InitializeHitDataProj;

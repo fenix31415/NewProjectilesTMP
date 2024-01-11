@@ -44,49 +44,59 @@ namespace Multicast
 		SoundType sound: 2;            // 48:03
 		uint32_t rotation_target: 27;  // 48:05 used if rotation == ToTarget
 
-		SpawnGroupData(const Json::Value& item) :
+		SpawnGroupData(const std::string& filename, const Json::Value& item) :
 			pattern(item["Pattern"]), rot(JsonUtils::mb_read_field<LaunchDir::Parallel>(item, "rotation")),
 			sound(JsonUtils::mb_read_field<SoundType::Single>(item, "sound")), pos_rnd(JsonUtils::mb_getPoint3(item, "posRnd")),
 			rot_offset(JsonUtils::mb_getPoint2(item, "rotOffset")), rot_rnd(JsonUtils::mb_getPoint2(item, "rotRnd")),
-			rotation_target(rot == LaunchDir::ToTarget ? Homing::get_key_ind(JsonUtils::getString(item, "rotationTarget")) : 0)
+			rotation_target(
+				rot == LaunchDir::ToTarget ? Homing::get_key_ind(filename, JsonUtils::getString(item, "rotationTarget")) : 0)
 		{}
 	};
 	static_assert(sizeof(SpawnGroupData) == 0x50);
 
 	struct SpawnGroupStorage
 	{
-		static void init(const Json::Value& SpawnGroups)
+		static void clear_keys()
 		{
+			keys.clear();
+		}
+		static void clear()
+		{
+			clear_keys();
 			data.clear();
+		}
 
+		static void init(const std::string& filename, const Json::Value& SpawnGroups)
+		{
 			for (auto& key : SpawnGroups.getMemberNames()) {
-				read_json_entry(key, SpawnGroups[key]);
+				read_json_entry(filename, key, SpawnGroups[key]);
 			}
 		}
 
-		static void init_keys(const Json::Value& SpawnGroups)
+		static void init_keys(const std::string& filename, const Json::Value& SpawnGroups)
 		{
-			keys.init();
-
 			for (auto& key : SpawnGroups.getMemberNames()) {
-				read_json_entry_keys(key, SpawnGroups[key]);
+				read_json_entry_keys(filename, key, SpawnGroups[key]);
 			}
 		}
 
 		static const auto& get_data(uint32_t ind) { return data[ind - 1]; }
 
-		static uint32_t get_key_ind(const std::string& key) { return keys.get(key); }
+		static uint32_t get_key_ind(const std::string& filename, const std::string& key) { return keys.get(filename, key); }
 
 	private:
-		static void read_json_entry(const std::string& key, const Json::Value& item)
+		static void read_json_entry(const std::string& filename, const std::string& key, const Json::Value& item)
 		{
-			[[maybe_unused]] uint32_t ind = keys.get(key);
+			[[maybe_unused]] uint32_t ind = get_key_ind(filename, key);
 			assert(ind == data.size() + 1);
 
-			data.emplace_back(item);
+			data.emplace_back(filename, item);
 		}
 
-		static void read_json_entry_keys(const std::string& key, const Json::Value&) { keys.add(key); }
+		static void read_json_entry_keys(const std::string& filename, const std::string& key, const Json::Value&)
+		{
+			keys.add(filename, key);
+		}
 
 		static inline JsonUtils::KeysMap keys;
 		static inline std::vector<SpawnGroupData> data;
@@ -107,13 +117,13 @@ namespace Multicast
 	{
 		std::variant<SpellData, ArrowData> data;
 
-		static uint32_t currentOrID(const Json::Value& item, const std::string& field)
+		static uint32_t currentOrID(const std::string& filename, const Json::Value& item, const std::string& field)
 		{
 			auto spellID = JsonUtils::getString(item, field);
 			if (spellID == "Current")
 				return CURRENT;
 			else
-				return JsonUtils::get_formid(spellID);
+				return JsonUtils::get_formid(filename, spellID);
 		}
 
 		static constexpr uint32_t CURRENT = static_cast<uint32_t>(-1);
@@ -143,60 +153,66 @@ namespace Multicast
 
 	struct Storage
 	{
-		static void init(const Json::Value& MulticastData)
+		static void clear_keys() { keys.clear(); }
+		static void clear()
 		{
+			clear_keys();
 			data.clear();
+		}
 
+		static void init(const std::string& filename, const Json::Value& MulticastData)
+		{
 			for (auto& key : MulticastData.getMemberNames()) {
-				read_json_entry(key, MulticastData[key]);
+				read_json_entry(filename, key, MulticastData[key]);
 			}
 		}
 
-		static void init_keys(const Json::Value& MulticastData)
+		static void init_keys(const std::string& filename, const Json::Value& MulticastData)
 		{
-			keys.init();
-
 			for (auto& key : MulticastData.getMemberNames()) {
-				read_json_entry_keys(key, MulticastData[key]);
+				read_json_entry_keys(filename, key, MulticastData[key]);
 			}
 		}
 
 		static const auto& get_data(uint32_t ind) { return data[ind - 1]; }
 
-		static uint32_t get_key_ind(const std::string& key) { return keys.get(key); }
+		static uint32_t get_key_ind(const std::string& filename, const std::string& key) { return keys.get(filename, key); }
 
 	private:
-		static void read_json_entry(const std::string& key, const Json::Value& item)
+		static void read_json_entry(const std::string& filename, const std::string& key, const Json::Value& item)
 		{
-			[[maybe_unused]] uint32_t ind = keys.get(key);
+			[[maybe_unused]] uint32_t ind = get_key_ind(filename, key);
 			assert(ind == data.size() + 1);
 
 			data.push_back(std::vector<Data>());
 			auto& new_data = data.back();
 
 			for (int i = 0; i < (int)item.size(); i++) {
-				read_json_entry_item(new_data, item[i]);
+				read_json_entry_item(filename, new_data, item[i]);
 			}
 		}
 
-		static void read_json_entry_keys(const std::string& key, const Json::Value&) { keys.add(key); }
+		static void read_json_entry_keys(const std::string& filename, const std::string& key, const Json::Value&)
+		{
+			keys.add(filename, key);
+		}
 
-		static void read_json_entry_item(std::vector<Data>& new_data, const Json::Value& item)
+		static void read_json_entry_item(const std::string& filename, std::vector<Data>& new_data, const Json::Value& item)
 		{
 			SpellArrowData origin_formIDs;
 			if (item.isMember("spellID")) {
 				origin_formIDs.data = SpellData{};
 				auto& spelldata = std::get<SpellData>(origin_formIDs.data);
 
-				spelldata.spellID = SpellArrowData::currentOrID(item, "spellID");
+				spelldata.spellID = SpellArrowData::currentOrID(filename, item, "spellID");
 			} else if (item.isMember("weapID")) {
 				origin_formIDs.data = ArrowData{};
 				auto& arrowdata = std::get<ArrowData>(origin_formIDs.data);
 
-				arrowdata.weapID = SpellArrowData::currentOrID(item, "weapID");
+				arrowdata.weapID = SpellArrowData::currentOrID(filename, item, "weapID");
 
 				if (item.isMember("arrowID")) {
-					arrowdata.arrowID = SpellArrowData::currentOrID(item, "arrowID");
+					arrowdata.arrowID = SpellArrowData::currentOrID(filename, item, "arrowID");
 				} else {
 					arrowdata.arrowID = SpellArrowData::CURRENT;
 				}
@@ -209,10 +225,10 @@ namespace Multicast
 				JsonUtils::mb_read_field<HomingDetectionType::Individual>(item, "HomingDetection");
 
 			if (item.isMember("TriggerFunctions")) {
-				functions = TriggerFunctions::Functions(item["TriggerFunctions"]);
+				functions = TriggerFunctions::Functions(filename, item["TriggerFunctions"]);
 			}
 
-			auto pattern_ind = SpawnGroupStorage::get_key_ind(item["spawn_group"].asString());
+			auto pattern_ind = SpawnGroupStorage::get_key_ind(filename, item["spawn_group"].asString());
 			auto call_triggers = JsonUtils::mb_read_field<false>(item, "callTriggers");
 
 			new_data.emplace_back(origin_formIDs, functions, pattern_ind, homing_detection, call_triggers);
@@ -222,7 +238,7 @@ namespace Multicast
 		static inline std::vector<std::vector<Data>> data;
 	};
 
-	uint32_t get_key_ind(const std::string& key) { return Storage::get_key_ind(key); }
+	uint32_t get_key_ind(const std::string& filename, const std::string& key) { return Storage::get_key_ind(filename, key); }
 
 	namespace Sounds
 	{
@@ -243,7 +259,59 @@ namespace Multicast
 
 		RE::BSSoundHandle tmpsound;
 
+		void prepare(RE::BSSoundHandle& shandle, RE::MagicItem* spel, RE::TESObjectREFR* caster)
+		{
+			auto sid = RE::MagicSystem::SoundID::kRelease;
+			auto eff = FenixUtils::getAVEffectSetting(spel);
+			auto sndr = EffectSetting__get_sndr(eff, sid);
+			// Release
+			_generic_foo_<66382, bool(RE::BSSoundHandle&)>::eval(shandle);
+			RE::BSAudioManager::GetSingleton()->BuildSoundDataFromDescriptor(shandle, sndr, 0);
+			shandle.SetObjectToFollow(caster->Get3D());
+		}
+
 		void play_cast_sound(RE::TESObjectREFR* caster, RE::MagicItem* spel, const RE::NiPoint3& start_pos)
+		{
+			RE::BSSoundHandle shandle;
+
+			auto sid = RE::MagicSystem::SoundID::kRelease;
+			if (auto eff = FenixUtils::getAVEffectSetting(spel)) {
+				if (auto sndr = EffectSetting__get_sndr(eff, sid)) {
+					RE::BSAudioManager::GetSingleton()->BuildSoundDataFromDescriptor(shandle, sndr, 16);
+
+					//shandle.SetPosition();
+					//const auto& start_pos = caster->GetPosition();
+					if (_generic_foo_<66370, bool(RE::BSSoundHandle&, float x, float y, float z)>::eval(shandle, start_pos.x,
+							start_pos.y, start_pos.z)) {
+						shandle.SetObjectToFollow(caster->Get3D());
+						if (shandle.Play())
+							logger::info("Q");
+					}
+				}
+			}
+		}
+
+		void play_cast_sound__(RE::TESObjectREFR* caster, RE::MagicItem* spel, const RE::NiPoint3& start_pos)
+		{
+			//RE::BSSoundHandle shandle;
+			RE::BSSoundHandle& shandle = tmpsound;
+			if (!shandle.IsValid()) {
+				prepare(shandle, spel, caster);
+			}
+
+			if (shandle.IsValid()) {
+				if (shandle.IsPlaying())
+					shandle.Stop();
+				//shandle.SetPosition();
+				const auto& start_pos_ = RE::PlayerCharacter::GetSingleton()->GetPosition();
+				_generic_foo_<66382, bool(RE::BSSoundHandle&, float x, float y, float z)>::eval(shandle, start_pos_.x,
+					start_pos_.y, start_pos_.z);
+				start_pos;
+				shandle.Play();
+			}
+		}
+
+		void play_cast_sound_(RE::TESObjectREFR* caster, RE::MagicItem* spel, const RE::NiPoint3& start_pos)
 		{
 			if (auto root = caster->Get3D2()) {
 				RE::BSSoundHandle shandle;
@@ -471,34 +539,26 @@ namespace Multicast
 			RE::NiPoint3 cast_dir = pattern_data.pattern.getCastDir(SP_CD.parallel_rot);
 			cast_dir.Unitize();
 
-			// Homing::Evenly support
+			// Homing::Evenly and ToTarget support
 			std::vector<RE::Actor*> targets;
-			uint32_t homingInd = 0;
-			if (data.homing_setting == HomingDetectionType::Evenly) {
-				homingInd = pattern_data.rotation_target;
-				if (!homingInd)
-					homingInd = data.functions.get_homing_ind(false);
+			uint32_t homingInd = pattern_data.rotation_target;
+			if (!homingInd)
+				homingInd = data.functions.get_homing_ind(false);
 
-				if (!homingInd)
-					homingInd = data.functions.get_homing_ind(true);
+			if (!homingInd)
+				homingInd = data.functions.get_homing_ind(true);
 
-				assert(homingInd);
-				if (homingInd) {
-					targets = Homing::get_targets(homingInd, caster, SP_CD.start_pos);
+			// homingInd may be 0 for ToTarget
+			if (homingInd) {
+				targets = Homing::get_targets(homingInd, caster, SP_CD.start_pos);
 
-					std::random_device rd;
-					std::mt19937 g(rd());
-					std::shuffle(targets.begin(), targets.end(), g);
-				}
+				std::random_device rd;
+				std::mt19937 g(rd());
+				std::shuffle(targets.begin(), targets.end(), g);
 			}
 
-			// Sounds
-			// SpellData
-			if (type == 0 && pattern_data.sound == SoundType::Single)
-				Sounds::play_cast_sound(origin, std::get<CastData::SpellData>(SP_CD.spellarrow_data).spel, SP_CD.start_pos);
-			// TODO: ArrowData
-
-			bool needsound = pattern_data.sound == SoundType::Every;
+			bool needsound_every = pattern_data.sound == SoundType::Every;
+			bool needsound_single = type == 0 && pattern_data.sound == SoundType::Single;
 			size_t target_ind = 0;
 
 			Positioning::Plane plane(SP_CD.start_pos, cast_dir);
@@ -513,7 +573,8 @@ namespace Multicast
 						target_ind = 0;
 				}
 
-				auto handle = multiCastGroupItem(point, data, SP_CD, needsound, cast_dir, caster, target);
+				auto handle = multiCastGroupItem(point, data, SP_CD, needsound_every || needsound_single && i == 0, cast_dir,
+					caster, target);
 
 				if (auto proj = handle.get().get()) {
 					if (data.call_triggers) {
@@ -568,23 +629,34 @@ namespace Multicast
 
 	void install() {}
 
-	void init(const Json::Value& json_root)
+	void clear_keys()
+	{
+		SpawnGroupStorage::clear_keys();
+		Storage::clear_keys();
+	}
+	void clear()
+	{
+		SpawnGroupStorage::clear();
+		Storage::clear();
+	}
+
+	void init(const std::string& filename, const Json::Value& json_root)
 	{
 		if (json_root.isMember("MulticastSpawnGroups")) {
-			SpawnGroupStorage::init(json_root["MulticastSpawnGroups"]);
+			SpawnGroupStorage::init(filename, json_root["MulticastSpawnGroups"]);
 		}
 		if (json_root.isMember("MulticastData")) {
-			Storage::init(json_root["MulticastData"]);
+			Storage::init(filename, json_root["MulticastData"]);
 		}
 	}
 
-	void init_keys(const Json::Value& json_root)
+	void init_keys(const std::string& filename, const Json::Value& json_root)
 	{
 		if (json_root.isMember("MulticastSpawnGroups")) {
-			SpawnGroupStorage::init_keys(json_root["MulticastSpawnGroups"]);
+			SpawnGroupStorage::init_keys(filename, json_root["MulticastSpawnGroups"]);
 		}
 		if (json_root.isMember("MulticastData")) {
-			Storage::init_keys(json_root["MulticastData"]);
+			Storage::init_keys(filename, json_root["MulticastData"]);
 		}
 	}
 }
