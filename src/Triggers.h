@@ -16,7 +16,6 @@ namespace Triggers
 		EffectStart,
 		EffectEnd,
 		ProjDestroyed,
-		ProjHits,
 		ProjImpact,
 
 		Total  // for std::array

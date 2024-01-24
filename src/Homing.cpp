@@ -460,7 +460,7 @@ namespace Homing
 			{
 				auto proj_dir = proj->linearVelocity;
 				proj_dir.Unitize();
-				draw_line<Colors::RED>(proj->GetPosition(), proj->GetPosition() + proj_dir);
+				draw_line(proj->GetPosition(), proj->GetPosition() + proj_dir, Colors::RED);
 			}
 #endif  // DEBUG
 		}
@@ -484,8 +484,8 @@ namespace Homing
 			{
 				bool ans = _ShouldUseDesiredTarget(proj);
 				if (auto target = proj->desiredTarget.get().get()) {
-					draw_point0<Colors::RED>(target->GetPosition());
-					draw_point0<Colors::BLU>(proj->GetPosition());
+					draw_point(target->GetPosition(), Colors::RED, 0);
+					draw_point(proj->GetPosition(), Colors::BLU, 0);
 
 					auto range = proj->GetProjectileBase()->data.range;
 
@@ -560,7 +560,7 @@ namespace Homing
 					if (auto ind = get_cursor_ind(a)) {
 						const auto& data = Storage::get_data(ind);
 						if (auto target = Targeting::Cursor::find_cursor_target(a, data, Targeting::WITHIN_DIST2))
-							draw_line0(a->GetPosition(), target->GetPosition());
+							draw_line(a->GetPosition(), target->GetPosition(), Colors::RED, 0);
 					}
 				}
 
@@ -608,7 +608,7 @@ namespace Homing
 
 							auto cur_p = origin + right_dir * cos(alpha) + up_dir * sin(alpha);
 
-							draw_line(old, cur_p, 5, 0);
+							draw_line(old, cur_p, Colors::RED, 0);
 							old = cur_p;
 						}
 					}

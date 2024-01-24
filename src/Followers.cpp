@@ -6,13 +6,6 @@
 
 namespace Followers
 {
-	enum class Collision : uint32_t
-	{
-		Actor,
-		Spell,
-		None
-	};
-
 	// TODO: cylinder
 	enum class Rounding : uint32_t
 	{
@@ -403,70 +396,13 @@ namespace Followers
 
 					_InitHavok__GetCollisionLayer = add_trampoline<5, 42934, 0x9d, true>(&xbyakCode);  // SkyrimSE.exe+74beed
 				}
-
-				{
-					// TargetPick
-					struct Code : Xbyak::CodeGenerator
-					{
-						Code(uintptr_t func_addr)
-						{
-							// r14 == proj
-							mov(rdx, r14);
-							mov(rax, func_addr);
-							jmp(rax);
-						}
-					} xbyakCode{ uintptr_t(TargetPick__GetCollisionLayer) };
-
-					_TargetPick__GetCollisionLayer = add_trampoline<5, 42982, 0x187, true>(&xbyakCode);  // SkyrimSE.exe+74ee97
-				}
-
-				{
-					// PlayerSmth
-					struct Code : Xbyak::CodeGenerator
-					{
-						Code(uintptr_t func_addr)
-						{
-							// rdi == proj
-							mov(rdx, rdi);
-							mov(rax, func_addr);
-							jmp(rax);
-						}
-					} xbyakCode{ uintptr_t(PlayerSmth__GetCollisionLayer) };
-
-					_PlayerSmth__GetCollisionLayer = add_trampoline<5, 37684, 0x680, true>(&xbyakCode);  // SkyrimSE.exe+62b0e0
-				}
-
-				{
-					// MissileImpale
-					struct Code : Xbyak::CodeGenerator
-					{
-						Code(uintptr_t func_addr)
-						{
-							// rsi == proj
-							mov(rdx, rsi);
-							mov(rax, func_addr);
-							jmp(rax);
-						}
-					} xbyakCode{ uintptr_t(MissileImpale__GetCollisionLayer) };
-
-					_MissileImpale__GetCollisionLayer = add_trampoline<5, 42855, 0xd0f, true>(&xbyakCode);  // SkyrimSE.exe+7467ef
-				}
 			}
 
 		private:
 			static RE::COL_LAYER GetCollisionLayer(RE::Projectile* proj, RE::COL_LAYER origin)
 			{
 				if (is_follower(proj)) {
-					auto& data = Storage::get_data(get_follower_ind(proj));
-					switch (data.collision) {
-					case Collision::Actor:
-						return RE::COL_LAYER(54);
-					case Collision::None:
-						return RE::COL_LAYER::kNonCollidable;
-					case Collision::Spell:
-					default:
-						return origin;
-					}
+					return layer2layer(Storage::get_data(get_follower_ind(proj)).collision);
 				}
 
 				return origin;
@@ -474,28 +410,11 @@ namespace Followers
 
 			static RE::COL_LAYER InitHavok__GetCollisionLayer(RE::BGSProjectile* bproj, RE::Projectile* proj)
 			{
-				auto origin = _InitHavok__GetCollisionLayer(bproj);
-				logger::info("OK");
-				return GetCollisionLayer(proj, origin);
+				return GetCollisionLayer(proj, _InitHavok__GetCollisionLayer(bproj));
 			}
-			static RE::COL_LAYER TargetPick__GetCollisionLayer(RE::BGSProjectile* bproj, RE::Projectile* proj)
-			{
-				return GetCollisionLayer(proj, _TargetPick__GetCollisionLayer(bproj));
-			}
-			static RE::COL_LAYER PlayerSmth__GetCollisionLayer(RE::BGSProjectile* bproj, RE::Projectile* proj)
-			{
-				return GetCollisionLayer(proj, _PlayerSmth__GetCollisionLayer(bproj));
-			}
-			static RE::COL_LAYER MissileImpale__GetCollisionLayer(RE::BGSProjectile* bproj, RE::Projectile* proj)
-			{
-				return GetCollisionLayer(proj, _MissileImpale__GetCollisionLayer(bproj));
-			}
-			
+
 			using func_t = RE::COL_LAYER(RE::BGSProjectile*);
 			static inline REL::Relocation<func_t> _InitHavok__GetCollisionLayer;
-			static inline REL::Relocation<func_t> _TargetPick__GetCollisionLayer;
-			static inline REL::Relocation<func_t> _PlayerSmth__GetCollisionLayer;
-			static inline REL::Relocation<func_t> _MissileImpale__GetCollisionLayer;
 		};
 	}
 
@@ -563,6 +482,19 @@ namespace Followers
 			}
 			FenixUtils::Projectile__set_collision_layer(proj, RE::COL_LAYER::kSpell);
 			disable_follower(proj);
+		}
+	}
+
+	RE::COL_LAYER layer2layer(Collision l)
+	{
+		switch (l) {
+		case Collision::Actor:
+			return RE::COL_LAYER(54);
+		case Collision::None:
+			return RE::COL_LAYER::kNonCollidable;
+		case Collision::Spell:
+		default:
+			return RE::COL_LAYER::kSpell;
 		}
 	}
 

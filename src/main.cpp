@@ -1,8 +1,8 @@
 extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a_skse, SKSE::PluginInfo* a_info)
 {
-#ifndef DEBUG
-	auto sink = std::make_shared<spdlog::sinks::msvc_sink_mt>();
-#else
+//#ifndef DEBUG
+//	auto sink = std::make_shared<spdlog::sinks::msvc_sink_mt>();
+//#else
 	auto path = logger::log_directory();
 	if (!path) {
 		return false;
@@ -11,7 +11,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 	*path /= Version::PROJECT;
 	*path += ".log"sv;
 	auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path->string(), true);
-#endif
+//#endif
 
 	auto log = std::make_shared<spdlog::logger>("global log"s, std::move(sink));
 
@@ -54,31 +54,112 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 #include "Emitters.h"
 #include "Followers.h"
 
-#include <nlohmann/json-schema.hpp>
+#ifdef VALIDATE
 
-bool validate(const std::string path)
+#	define PY_SSIZE_T_CLEAN
+#	include <Python.h>
+
+void before_all()
 {
-	std::ifstream f("Data/HomingProjectilesSchema/schema.json");
-	nlohmann::json schema;
-	f >> schema;
+	Py_Initialize();
+	PyRun_SimpleString("import sys");
+	PyRun_SimpleString("sys.path.append(\"./Data/skse/plugins/\")");
+}
 
-	f = std::ifstream(path);
-	nlohmann::json document;
-	f >> document;
-
-	nlohmann::json_schema::json_validator validator;
-	validator.set_root_schema(schema);
-	try {
-		validator.validate(document);
-		return true;
-	} catch (const std::exception& e) {
-		logger::error("Validation failed, here is why: {}\n", e.what());
-		return false;
+void after_all()
+{
+	if (Py_FinalizeEx() < 0) {
+		logger::error("Finalize error\n");
 	}
 }
 
+bool validate_folder(const std::string& path)
+{
+	std::string schema = path + "/schema.json";
+
+	std::string ans;
+
+	PyObject *pName, *pModule, *pFunc;
+	PyObject *pArgs, *pValue;
+
+	const char* pythonfile = "multiply";
+	const char* funcname = "validate_all";
+
+	pName = PyUnicode_DecodeFSDefault(pythonfile);
+
+	pModule = PyImport_Import(pName);
+	Py_DECREF(pName);
+
+	if (!pModule) {
+		logger::error("Failed to load {}\n", pythonfile);
+		return false;
+	}
+
+	pFunc = PyObject_GetAttrString(pModule, funcname);
+
+	if (!pFunc || !PyCallable_Check(pFunc)) {
+		logger::error("Cannot find function {}\n", funcname);
+		Py_XDECREF(pFunc);
+		Py_DECREF(pModule);
+		return false;
+	}
+
+	pArgs = PyTuple_New(2);
+
+	pValue = PyUnicode_FromString(path.c_str());
+	if (!pValue) {
+		Py_DECREF(pArgs);
+		Py_DECREF(pModule);
+		logger::error("Cannot convert argument\n");
+		return false;
+	}
+	PyTuple_SetItem(pArgs, 0, pValue);
+
+	pValue = PyUnicode_FromString(schema.c_str());
+	if (!pValue) {
+		Py_DECREF(pArgs);
+		Py_DECREF(pModule);
+		logger::error("Cannot convert argument\n");
+		return false;
+	}
+	PyTuple_SetItem(pArgs, 1, pValue);
+
+	pValue = PyObject_CallObject(pFunc, pArgs);
+	Py_DECREF(pArgs);
+
+	if (!pValue) {
+		Py_DECREF(pFunc);
+		Py_DECREF(pModule);
+		PyErr_Print();
+		logger::error("Call failed\n");
+		return false;
+	}
+
+	ans = PyBytes_AsString(PyUnicode_AsUTF8String(pValue));
+	if (!ans.empty())
+		logger::error("{}", ans);
+
+	Py_DECREF(pValue);
+	Py_XDECREF(pFunc);
+	Py_DECREF(pModule);
+
+	return ans.empty();
+}
+#endif  // VALIDATE
+
 void read_json()
 {
+#ifdef VALIDATE
+	before_all();
+	bool valid = validate_folder("Data/HomingProjectiles");
+	after_all();
+
+	if (!valid) {
+		logger::error("Some jsons are invalid, skipping");
+		return;
+	}
+#endif
+
 	JsonUtils::FormIDsMap::clear();
 
 	Homing::clear();
@@ -89,31 +170,31 @@ void read_json()
 	Triggers::clear();
 
 	namespace fs = std::filesystem;
+
 	for (const auto& entry : fs::directory_iterator("Data/HomingProjectiles")) {
 		Json::Value json_root;
 		std::ifstream ifs;
-		if (entry.path().extension() == ".json") {
-			if (validate(entry.path().string())) {
-				ifs.open(entry);
-				ifs >> json_root;
-				ifs.close();
+		const auto& path = entry.path();
+		if (path.extension() == ".json" && path.filename() != "schema.json") {
+			ifs.open(entry);
+			ifs >> json_root;
+			ifs.close();
 
-				auto filename = entry.path().filename().string();
+			auto filename = path.filename().string();
 
-				JsonUtils::FormIDsMap::init(filename, json_root);
+			JsonUtils::FormIDsMap::init(filename, json_root);
 
-				Homing::init_keys(filename, json_root);
-				Multicast::init_keys(filename, json_root);
-				Emitters::init_keys(filename, json_root);
-				Followers::init_keys(filename, json_root);
+			Homing::init_keys(filename, json_root);
+			Multicast::init_keys(filename, json_root);
+			Emitters::init_keys(filename, json_root);
+			Followers::init_keys(filename, json_root);
 
-				Homing::init(filename, json_root);
-				Multicast::init(filename, json_root);
-				Emitters::init(filename, json_root);
-				Followers::init(filename, json_root);
+			Homing::init(filename, json_root);
+			Multicast::init(filename, json_root);
+			Emitters::init(filename, json_root);
+			Followers::init(filename, json_root);
 
-				Triggers::init(filename, json_root);
-			}
+			Triggers::init(filename, json_root);
 		}
 	}
 
@@ -129,6 +210,116 @@ void reset_json()
 	read_json();
 }
 
+class Settings : public SettingsBase
+{
+	static constexpr auto path = "Data/HomingProjectiles/settings.ini";
+
+public:
+
+	class ReloadHotkey
+	{
+		enum class AddKeys : uint32_t
+		{
+			Shift,
+			Ctrl,
+			Alt,
+
+			Total
+		};
+		static inline constexpr size_t AddKeysTotal = static_cast<size_t>(AddKeys::Total);
+
+		static inline std::array<int, AddKeysTotal> additionals = { {} };
+		static inline int key = 71;
+		
+		static void strip(std::string& str)
+		{
+			if (str.length() == 0) {
+				return;
+			}
+
+			auto start_it = str.begin();
+			auto end_it = str.rbegin();
+			while (std::isspace(*start_it)) {
+				++start_it;
+				if (start_it == str.end())
+					break;
+			}
+			while (std::isspace(*end_it)) {
+				++end_it;
+				if (end_it == str.rend())
+					break;
+			}
+			auto start_pos = start_it - str.begin();
+			auto end_pos = end_it.base() - str.begin();
+			str = start_pos <= end_pos ? std::string(start_it, end_it.base()) : "";
+		}
+
+		static void load_key(std::string s)
+		{
+			using K = RE::BSKeyboardDevice::Key;
+
+			strip(s);
+			int keycode = std::stoi(s);
+
+			AddKeys type = AddKeys::Total;
+			switch (keycode) {
+			case K::kRightAlt:
+			case K::kLeftAlt:
+				type = AddKeys::Alt;
+				break;
+			case K::kLeftControl:
+			case K::kRightControl:
+				type = AddKeys::Ctrl;
+				break;
+			case K::kLeftShift:
+			case K::kRightShift:
+				type = AddKeys::Shift;
+				break;
+			default:
+				break;
+			}
+
+			if (type != AddKeys::Total) {
+				additionals[static_cast<size_t>(type)] = keycode;
+			} else {
+				key = keycode;
+			}
+		}
+
+		static bool isPressed_adds()
+		{
+			bool ans = true;
+			for (int k : additionals) {
+				ans = ans && (k == 0 || RE::BSInputDeviceManager::GetSingleton()->GetKeyboard()->IsPressed(k));
+			}
+			return ans;
+		}
+
+	public:
+		static void load(const CSimpleIniA& ini) {
+			std::string keys;
+			if (ReadString(ini, "General", "reload_key", keys)) {
+				size_t pos = 0;
+				std::string token;
+				while ((pos = keys.find('+')) != std::string::npos) {
+					load_key(keys.substr(0, pos));
+					keys.erase(0, pos + 1);
+				}
+				load_key(keys);
+			}
+		}
+
+		static bool isPressed(int k) { return k == key && isPressed_adds(); }
+	};
+
+	static void load() {
+		CSimpleIniA ini;
+		ini.LoadFile(path);
+
+		ReloadHotkey::load(ini);
+	}
+};
+
 class InputHandler : public RE::BSTEventSink<RE::InputEvent*>
 {
 public:
@@ -138,15 +329,16 @@ public:
 		return std::addressof(singleton);
 	}
 
-	RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* e, RE::BSTEventSource<RE::InputEvent*>*) override
+	RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* evns, RE::BSTEventSource<RE::InputEvent*>*) override
 	{
-		if (!*e)
+		if (!*evns)
 			return RE::BSEventNotifyControl::kContinue;
 
-		if (auto buttonEvent = (*e)->AsButtonEvent();
-			buttonEvent && buttonEvent->HasIDCode() && (buttonEvent->IsDown() || buttonEvent->IsPressed())) {
-			if (int key = buttonEvent->GetIDCode(); key == 71) {
-				reset_json();
+		for (RE::InputEvent* e = *evns; e; e = e->next) {
+			if (auto buttonEvent = e->AsButtonEvent(); buttonEvent && buttonEvent->HasIDCode() && buttonEvent->IsDown()) {
+				if (Settings::ReloadHotkey::isPressed(buttonEvent->GetIDCode())) {
+					reset_json();
+				}
 			}
 		}
 		return RE::BSEventNotifyControl::kContinue;
@@ -160,24 +352,10 @@ public:
 	}
 };
 
-class DebugAPIHook
-{
-public:
-	static void Hook() { _Update = REL::Relocation<uintptr_t>(REL::ID(RE::VTABLE_PlayerCharacter[0])).write_vfunc(0xad, Update); }
-
-private:
-	static void Update(RE::PlayerCharacter* a, float delta)
-	{
-		_Update(a, delta);
-
-		SKSE::GetTaskInterface()->AddUITask([]() { DebugAPI_IMPL::DebugAPI::Update(); });
-	}
-
-	static inline REL::Relocation<decltype(Update)> _Update;
-};
-
 static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 {
+	//DebugRender::OnMessage(message);
+
 	switch (message->type) {
 	case SKSE::MessagingInterface::kPostLoad:
 		Hooks::PaddingsProjectileHook::Hook();
@@ -193,10 +371,7 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 		Followers::install();
 		read_json();
 		InputHandler::GetSingleton()->enable();
-
-#ifdef DEBUG
-		DebugAPIHook::Hook();
-#endif  // DEBUG
+		Settings::load();
 
 		break;
 	}
@@ -214,6 +389,8 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 
 	SKSE::Init(a_skse);
 	SKSE::AllocTrampoline(1 << 10);
+
+	//DebugRender::UpdateHooks::Hook();
 
 	g_messaging->RegisterListener("SKSE", SKSEMessageHandler);
 

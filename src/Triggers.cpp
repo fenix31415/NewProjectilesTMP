@@ -267,14 +267,13 @@ namespace Triggers
 				// 140628dd7 Actor::CombatHit
 				_InitializeHitData = trmp.write_call<5>(REL::ID(37673).address() + 0x1b7, InitializeHitData);
 
-				// 140628dc8 Actor::CombatHit
-				_InitializeHitDataProj = trmp.write_call<5>(REL::ID(37673).address() + 0x1a8, InitializeHitDataProj);
-
 				// 1407211ea HitFrameHandler::Handle
 				_DoMeleeAttack = trmp.write_call<5>(REL::ID(41747).address() + 0x3a, DoMeleeAttack);
-
-				// 14063311e Actor::MagicTarget::AddTarget
-				_AddTarget = trmp.write_call<5>(REL::ID(37832).address() + 0x8e, AddTarget);
+				
+				_EffectAddedC = REL::Relocation<uintptr_t>(RE::VTABLE_Character[4]).write_vfunc(0x8, EffectAddedC);
+				_EffectAddedP = REL::Relocation<uintptr_t>(RE::VTABLE_PlayerCharacter[4]).write_vfunc(0x8, EffectAddedP);
+				_EffectRemovedC = REL::Relocation<uintptr_t>(RE::VTABLE_Character[4]).write_vfunc(0x9, EffectRemovedC);
+				_EffectRemovedP = REL::Relocation<uintptr_t>(RE::VTABLE_PlayerCharacter[4]).write_vfunc(0x9, EffectRemovedP);
 
 				// 140550a37 MagicCaster::FireProjectile
 				_Launch1 = trmp.write_call<5>(REL::ID(33672).address() + 0x377, Launch1);
@@ -288,16 +287,16 @@ namespace Triggers
 				// SkyrimSE.exe+74bc21 Proj::Kill
 				_ClearFollowedObject = trmp.write_call<5>(REL::ID(42930).address() + 0x21, ClearFollowedObject);
 
-				_HandleHits1 = REL::Relocation<uintptr_t>(RE::VTABLE_MissileProjectile[0]).write_vfunc(0xBE, HandleHits1);
-				_HandleHits2 = REL::Relocation<uintptr_t>(RE::VTABLE_FlameProjectile[0]).write_vfunc(0xBE, HandleHits2);
-				_HandleHits3 = REL::Relocation<uintptr_t>(RE::VTABLE_ConeProjectile[0]).write_vfunc(0xBE, HandleHits3);
-				_HandleHits4 = REL::Relocation<uintptr_t>(RE::VTABLE_BeamProjectile[0]).write_vfunc(0xBE, HandleHits4);
-				_HandleHits5 = REL::Relocation<uintptr_t>(RE::VTABLE_ArrowProjectile[0]).write_vfunc(0xBE, HandleHits5);
-
 				// SkyrimSE.exe+7478cc MissileProj::AddImpact
 				_AddImpact1 = trmp.write_call<5>(REL::ID(42866).address() + 0xbc, AddImpact1);
 				// SkyrimSE.exe+735b06 ConeProj::AddImpact
 				_AddImpact2 = trmp.write_call<5>(REL::ID(42633).address() + 0x66, AddImpact2);
+				// SkyrimSE.exe+734232 BeamProj::AddImpact
+				_AddImpact3 = trmp.write_call<5>(REL::ID(42594).address() + 0xc2, AddImpact3);
+				// SkyrimSE.exe+73e757 FlameProj::AddImpact
+				_AddImpact4 = trmp.write_call<5>(REL::ID(42736).address() + 0x167, AddImpact4);
+				// SkyrimSE.exe+73fc9a GrenadeProj::AddImpact
+				_AddImpact5 = trmp.write_call<5>(REL::ID(42768).address() + 0x8a, AddImpact5);
 			}
 
 		private:
@@ -379,19 +378,6 @@ namespace Triggers
 				eval(&data, Event::HitByMelee, nullptr);
 			}
 
-			static void InitializeHitDataProj(RE::HitData* hitdata, RE::Actor* attacker, RE::Actor* victim, RE::Projectile* proj)
-			{
-				_InitializeHitDataProj(hitdata, attacker, victim, proj);
-
-				Data data(hitdata->weapon, attacker, proj->GetProjectileBase(), proj->spell, nullptr, proj->ammoSource,
-					proj->castingSource, proj->ammoSource ? Data::Type::Arrow : Data::Type::Spell,
-					FenixUtils::Geom::rot_at(hitdata->hitDirection), hitdata->hitPosition);
-
-				eval(&data, Event::HitProjectile, nullptr);
-				data.shooter = victim;
-				eval(&data, Event::HitByProjectile, nullptr);
-			}
-
 			static void DoMeleeAttack(RE::Actor* a, bool left, char a3)
 			{
 				_DoMeleeAttack(a, left, a3);
@@ -422,30 +408,84 @@ namespace Triggers
 				eval(&data, Event::Swing, nullptr);
 			}
 
-			static bool AddTarget(RE::MagicTarget* mtarget, RE::MagicTarget::AddTargetData* addData)
+			static void EffectAdded(RE::MagicTarget* _this, RE::ActiveEffect* a_effect)
 			{
-				if (_AddTarget(mtarget, addData)) {
-					auto a = (RE::Actor*)((char*)mtarget - 0x98);
+				auto a = (RE::Actor*)((char*)_this - 0x98);
 
-					Data data(nullptr, a, nullptr, addData->magicItem, addData->effect ? addData->effect->baseEffect : nullptr,
-						nullptr, addData->castingSource, Data::Type::None, { a->GetAimAngle(), a->GetAimHeading() },
-						a->GetPosition());
+				auto effsetting = a_effect->GetBaseObject();
+				
 
-					eval(&data, Event::EffectStart, nullptr);
+				Data data(nullptr, a, effsetting ? effsetting->data.projectileBase : nullptr, a_effect->spell, effsetting,
+					nullptr, a_effect->castingSource, Data::Type::None, { a->GetAimAngle(), a->GetAimHeading() },
+					a->GetPosition());
 
-					return true;
-				} else {
-					return false;
+				eval(&data, Event::EffectStart, nullptr);
+			}
+
+			static void EffectAddedP(RE::MagicTarget* _this, RE::ActiveEffect* a_effect)
+			{
+				_EffectAddedP(_this, a_effect);
+				if (a_effect) {
+					EffectAdded(_this, a_effect);
 				}
+			}
+
+			static void EffectAddedC(RE::MagicTarget* _this, RE::ActiveEffect* a_effect)
+			{
+				_EffectAddedC(_this, a_effect);
+				if (a_effect) {
+					EffectAdded(_this, a_effect);
+				}
+			}
+
+			static void EffectRemoved(RE::MagicTarget* _this, RE::ActiveEffect* a_effect)
+			{
+				auto a = (RE::Actor*)((char*)_this - 0x98);
+
+				auto effsetting = a_effect->GetBaseObject();
+
+				Data data(nullptr, a, effsetting ? effsetting->data.projectileBase : nullptr, a_effect->spell, effsetting,
+					nullptr, a_effect->castingSource, Data::Type::None, { a->GetAimAngle(), a->GetAimHeading() },
+					a->GetPosition());
+
+				eval(&data, Event::EffectEnd, nullptr);
+			}
+
+			static void EffectRemovedP(RE::MagicTarget* _this, RE::ActiveEffect* a_effect)
+			{
+				if (a_effect) {
+					EffectRemoved(_this, a_effect);
+				}
+				_EffectRemovedP(_this, a_effect);
+			}
+
+			static void EffectRemovedC(RE::MagicTarget* _this, RE::ActiveEffect* a_effect)
+			{
+				if (a_effect) {
+					EffectRemoved(_this, a_effect);
+				}
+				_EffectRemovedC(_this, a_effect);
 			}
 
 			static void CalcVelocityVector(RE::Projectile* proj)
 			{
-				if (proj->linearVelocity.Length() != 0) {
-					TriggerFunctions::Function changeVel(proj->linearVelocity);
-					_CalcVelocityVector(proj);
-					Data data(proj);
-					changeVel.eval(&data, proj);
+				if (proj->linearVelocity.x != 0 || proj->linearVelocity.y != 0 || proj->linearVelocity.z != 0) {
+					if (proj->linearVelocity.x != 0) {
+						RE::COL_LAYER layer = RE::COL_LAYER::kSpell;
+						memcpy(&layer, &proj->linearVelocity.x, 4);
+						FenixUtils::Projectile__set_collision_layer(proj, layer);
+					}
+
+					// if both 0, then it is Add 0, so fine if it is skipped
+					if (proj->linearVelocity.y != 0 || proj->linearVelocity.z != 0) {
+						TriggerFunctions::Function changeVel(proj->linearVelocity);
+						_CalcVelocityVector(proj);
+						Data data(proj);
+						changeVel.eval(&data, proj);
+					} else {
+						_CalcVelocityVector(proj);
+					}
+
 				} else {
 					_CalcVelocityVector(proj);
 				}
@@ -461,71 +501,65 @@ namespace Triggers
 				_ClearFollowedObject(shandle);
 			}
 
-			static bool OnHandleHits(RE::Projectile* proj, bool ans)
+			static RE::Projectile::ImpactData* OnAddImpact(RE::Projectile* proj, RE::Projectile::ImpactData* ans)
 			{
 				if (ans) {
 					Data data(proj);
-					eval(&data, Event::ProjHits, nullptr);
-				}
-				return ans;
-			}
-
-			static bool HandleHits1(RE::Projectile* proj, void* collector)
-			{
-				return OnHandleHits(proj, _HandleHits1(proj, collector));
-			}
-			static bool HandleHits2(RE::Projectile* proj, void* collector)
-			{
-				return OnHandleHits(proj, _HandleHits2(proj, collector));
-			}
-			static bool HandleHits3(RE::Projectile* proj, void* collector)
-			{
-				return OnHandleHits(proj, _HandleHits3(proj, collector));
-			}
-			static bool HandleHits4(RE::Projectile* proj, void* collector)
-			{
-				return OnHandleHits(proj, _HandleHits4(proj, collector));
-			}
-			static bool HandleHits5(RE::Projectile* proj, void* collector)
-			{
-				return OnHandleHits(proj, _HandleHits5(proj, collector));
-			}
-
-			static void* OnAddImpact(RE::Projectile* proj, void* ans, RE::NiPoint3& targetLoc)
-			{
-				if (ans) {
-					Data data(proj);
-					data.pos = targetLoc;
+					data.pos = ans->desiredTargetLoc;
+					data.rot = FenixUtils::Geom::rot_at(-ans->negativeVelocity);
 					eval(&data, Event::ProjImpact, nullptr);
+					if (auto target = ans->collidee.get().get(); target && target->As<RE::Actor>()) {
+						eval(&data, Event::HitProjectile, nullptr);
+						data.shooter = target;
+						eval(&data, Event::HitByProjectile, nullptr);
+					}
 				}
 				return ans;
 			}
-			static void* AddImpact1(RE::Projectile* proj, RE::TESObjectREFR* refr, RE::NiPoint3& targetLoc,
+			static RE::Projectile::ImpactData* AddImpact1(RE::Projectile* proj, RE::TESObjectREFR* refr, RE::NiPoint3& targetLoc,
 				RE::NiPoint3* velocity_or_normal, RE::hkpCollidable* collidable, uint32_t shape_key, bool hit_happend)
 			{
 				return OnAddImpact(proj,
-					_AddImpact1(proj, refr, targetLoc, velocity_or_normal, collidable, shape_key, hit_happend), targetLoc);
+					_AddImpact1(proj, refr, targetLoc, velocity_or_normal, collidable, shape_key, hit_happend));
 			}
-			static void* AddImpact2(RE::Projectile* proj, RE::TESObjectREFR* refr, RE::NiPoint3& targetLoc,
+			static RE::Projectile::ImpactData* AddImpact2(RE::Projectile* proj, RE::TESObjectREFR* refr, RE::NiPoint3& targetLoc,
 				RE::NiPoint3* velocity_or_normal, RE::hkpCollidable* collidable, uint32_t shape_key, bool hit_happend)
 			{
 				return OnAddImpact(proj,
-					_AddImpact2(proj, refr, targetLoc, velocity_or_normal, collidable, shape_key, hit_happend), targetLoc);
+					_AddImpact2(proj, refr, targetLoc, velocity_or_normal, collidable, shape_key, hit_happend));
+			}
+			static RE::Projectile::ImpactData* AddImpact3(RE::Projectile* proj, RE::TESObjectREFR* refr, RE::NiPoint3& targetLoc,
+				RE::NiPoint3* velocity_or_normal, RE::hkpCollidable* collidable, uint32_t shape_key, bool hit_happend)
+			{
+				return OnAddImpact(proj,
+					_AddImpact3(proj, refr, targetLoc, velocity_or_normal, collidable, shape_key, hit_happend));
+			}
+			static RE::Projectile::ImpactData* AddImpact4(RE::Projectile* proj, RE::TESObjectREFR* refr, RE::NiPoint3& targetLoc,
+				RE::NiPoint3* velocity_or_normal, RE::hkpCollidable* collidable, uint32_t shape_key, bool hit_happend)
+			{
+				return OnAddImpact(proj,
+					_AddImpact4(proj, refr, targetLoc, velocity_or_normal, collidable, shape_key, hit_happend));
+			}
+			static RE::Projectile::ImpactData* AddImpact5(RE::Projectile* proj, RE::TESObjectREFR* refr, RE::NiPoint3& targetLoc,
+				RE::NiPoint3* velocity_or_normal, RE::hkpCollidable* collidable, uint32_t shape_key, bool hit_happend)
+			{
+				return OnAddImpact(proj,
+					_AddImpact5(proj, refr, targetLoc, velocity_or_normal, collidable, shape_key, hit_happend));
 			}
 
 			static inline REL::Relocation<decltype(AddImpact1)> _AddImpact1;
 			static inline REL::Relocation<decltype(AddImpact2)> _AddImpact2;
-			static inline REL::Relocation<decltype(HandleHits1)> _HandleHits1;
-			static inline REL::Relocation<decltype(HandleHits2)> _HandleHits2;
-			static inline REL::Relocation<decltype(HandleHits3)> _HandleHits3;
-			static inline REL::Relocation<decltype(HandleHits4)> _HandleHits4;
-			static inline REL::Relocation<decltype(HandleHits5)> _HandleHits5;
+			static inline REL::Relocation<decltype(AddImpact3)> _AddImpact3;
+			static inline REL::Relocation<decltype(AddImpact4)> _AddImpact4;
+			static inline REL::Relocation<decltype(AddImpact5)> _AddImpact5;
 			static inline REL::Relocation<decltype(ClearFollowedObject)> _ClearFollowedObject;
 			static inline REL::Relocation<decltype(CalcVelocityVector)> _CalcVelocityVector;
 			static inline REL::Relocation<decltype(InitializeHitData)> _InitializeHitData;
-			static inline REL::Relocation<decltype(InitializeHitDataProj)> _InitializeHitDataProj;
 			static inline REL::Relocation<decltype(DoMeleeAttack)> _DoMeleeAttack;
-			static inline REL::Relocation<decltype(AddTarget)> _AddTarget;
+			static inline REL::Relocation<decltype(EffectAddedC)> _EffectAddedC;
+			static inline REL::Relocation<decltype(EffectAddedP)> _EffectAddedP;
+			static inline REL::Relocation<decltype(EffectRemovedC)> _EffectRemovedC;
+			static inline REL::Relocation<decltype(EffectRemovedP)> _EffectRemovedP;
 			static inline REL::Relocation<decltype(LaunchArrow)> _LaunchArrow;
 			static inline REL::Relocation<decltype(FireProjectile1)> _FireProjectile1;
 			static inline REL::Relocation<decltype(FireProjectile2)> _FireProjectile2;

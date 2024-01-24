@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.21)
 
+set(VALIDATE ON)
+
+if (VALIDATE)
+	add_compile_definitions(VALIDATE)
+endif ()
+
 # ---- Cache build vars ----
 
 macro(set_from_environment VARIABLE)
@@ -82,7 +88,7 @@ endif ()
 
 find_package(spdlog REQUIRED CONFIG)
 find_package(jsoncpp REQUIRED CONFIG)
-find_package(nlohmann_json_schema_validator REQUIRED)
+find_package(imgui REQUIRED CONFIG)
 
 # ---- Add source files ----
 
@@ -126,6 +132,14 @@ source_group(
 
 # ---- Create DLL ----
 
+if (VALIDATE)
+	add_library(pythonjsonvalid STATIC IMPORTED) # or STATIC instead of SHARED
+	set_target_properties(pythonjsonvalid PROPERTIES
+		IMPORTED_LOCATION "c:/Python3/libs/python310.lib"
+		INTERFACE_INCLUDE_DIRECTORIES "c:/Python3/include"
+	)
+endif()
+
 add_library(
 	${PROJECT_NAME}
 	SHARED
@@ -155,8 +169,15 @@ target_link_libraries(
 		CommonLibSSE::CommonLibSSE
 		spdlog::spdlog
 		JsonCpp::JsonCpp
-		nlohmann_json_schema_validator
 )
+
+if (VALIDATE)
+	target_link_libraries(
+		${PROJECT_NAME}
+		PRIVATE
+			pythonjsonvalid
+	)
+endif ()
 
 if (DEFINED UseUselessUtils AND UseUselessUtils)
 	target_link_libraries(

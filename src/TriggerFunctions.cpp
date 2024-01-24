@@ -42,9 +42,9 @@ namespace TriggerFunctions
 	void Function::eval_ChangeSpeed(RE::Projectile* proj) const
 	{
 		if (!proj->flags.any(RE::Projectile::Flags::kInited)) {
-			assert(proj->linearVelocity.Length() == 0);
+			// x for col_layer
+			assert(proj->linearVelocity.y == 0 && proj->linearVelocity.z == 0);
 
-			proj->linearVelocity.x = 3.14f;
 			memcpy(&proj->linearVelocity.y, &numb.type, 4);
 			proj->linearVelocity.z = numb.value;
 		} else {
@@ -55,6 +55,32 @@ namespace TriggerFunctions
 	}
 	void Function::eval_ChangeRange(RE::Projectile* proj) const { numb.apply(proj->range); }
 	void Function::eval_ApplyMultiCast(Triggers::Data* data) const { Multicast::apply(data, ind); }
+	void Function::eval_Placeatme(Triggers::Data* data) const
+	{
+		RE::TESDataHandler::GetSingleton()->CreateReferenceAtLocation(form->As<RE::TESBoundObject>(), data->pos,
+			RE::NiPoint3(data->rot.x, 0, data->rot.z), data->shooter->GetParentCell(), data->shooter->GetWorldspace(), nullptr,
+			nullptr, RE::ObjectRefHandle(), false, true);
+	}
+	void Function::eval_SendAnimEvent(Triggers::Data* data) const { data->shooter->NotifyAnimationGraph(event); }
+	void Function::eval_Explode(Triggers::Data* data) const
+	{
+		RE::NiMatrix3 M;
+		M.EulerAnglesToAxesZXY(data->rot.x, 0, data->rot.z);
+		RE::Explosion::SpawnExplosionData expldata{ form->As<RE::BGSExplosion>(), data->shooter->GetParentCell(), data->shooter,
+			nullptr, nullptr, nullptr, nullptr, 0, data->pos, M, 1, 0 };
+		RE::Explosion::SpawnExplosion(expldata);
+	}
+	void Function::eval_SetColLayer(RE::Projectile* proj) const
+	{
+		if (!proj->flags.any(RE::Projectile::Flags::kInited)) {
+			// y, z for speed
+			assert(proj->linearVelocity.x == 0);
+
+			memcpy(&proj->linearVelocity.x, &layer, 4);
+		} else {
+			FenixUtils::Projectile__set_collision_layer(proj, layer);
+		}
+	}
 
 	void Function::eval_impl(Triggers::Data* data, RE::Projectile* proj, RE::Actor* targetOverride) const
 	{
@@ -91,13 +117,29 @@ namespace TriggerFunctions
 			eval_ApplyMultiCast(data);
 			break;
 		case Type::DisableFollower:
-			eval_DisableFollower(proj);
+			if (proj)
+				eval_DisableFollower(proj);
 			break;
 		case Type::DisableEmitter:
-			eval_DisableEmitter(proj);
+			if (proj)
+				eval_DisableEmitter(proj);
 			break;
 		case Type::DisableHoming:
-			eval_DisableHoming(proj);
+			if (proj)
+				eval_DisableHoming(proj);
+			break;
+		case Type::Placeatme:
+			eval_Placeatme(data);
+			break;
+		case Type::SendAnimEvent:
+			eval_SendAnimEvent(data);
+			break;
+		case Type::Explode:
+			eval_Explode(data);
+			break;
+		case Type::SetColLayer:
+			if (proj)
+				eval_SetColLayer(proj);
 			break;
 		default:
 			return;
@@ -157,6 +199,19 @@ namespace TriggerFunctions
 		case Type::DisableEmitter:
 		case Type::DisableHoming:
 			break;
+		case Type::Placeatme:
+			form = RE::TESForm::LookupByID(JsonUtils::get_formid(filename, JsonUtils::getString(function, "form")));
+			break;
+		case Type::SendAnimEvent:
+			memset(&event, 0, 8);
+			event = JsonUtils::getString(function, "event");
+			break;
+		case Type::Explode:
+			form = RE::TESForm::LookupByID(JsonUtils::get_formid(filename, JsonUtils::getString(function, "explosion")));
+			break;
+		case Type::SetColLayer:
+			layer = Followers::layer2layer(JsonUtils::read_enum<Followers::Collision>(function, "layer"));
+			break;
 		default:
 			assert(false);
 			break;
@@ -165,8 +220,18 @@ namespace TriggerFunctions
 
 	Function::Function(const RE::NiPoint3& linVel) : type(Type::ChangeSpeed), on_follower(false)
 	{
-		assert(linVel.x == 3.14f);
 		numb = NumberFunctionData(linVel);
+	}
+
+	Function::Function(const Function& other) : type(other.type), on_follower(other.on_follower)
+	{
+		if (type == Type::SendAnimEvent) {
+			memset(&event, 0, 8);
+			event = other.event;
+			return;
+		}
+
+		memcpy(this, &other, sizeof(Function));
 	}
 
 	Functions::Functions(const std::string& filename, const Json::Value& json_TriggerFunctions) :

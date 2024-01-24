@@ -67,25 +67,37 @@
       "type": "string",
       "pattern": "^0x[0-9a-fA-F]{1,8}$"
     },
-    
+
     "ifFigureNotSingle": {
       "$comment": "Size for not Single figure",
       "if": {
+        "type": "object",
+        "properties": {
+          "shape": {}
+        },
         "allOf": [
           {
             "not": {
+              "type": "object",
               "properties": {
-                "shape": { "const": "Single" }
+                "shape": {
+                  "type": "string",
+                  "const": "Single"
+                }
               },
               "required": ["shape"]
             }
           },
           {
+            "properties": {
+              "shape": true
+            },
             "required": ["shape"]
           }
         ]
       },
       "then": {
+        "type": "object",
         "properties": {
           "size": {
             "type": "integer",
@@ -106,7 +118,7 @@
           "minimum": 1
         },
         "shape": {
-          "description": "A method of position points (default: Single)",
+          "description": "A method of position points",
           "enum": [
             "Single",
             "Line",
@@ -121,7 +133,7 @@
           ]
         }
       },
-      "required": [ "shape" ],
+      "required": ["shape"],
       "allOf": [{ "$ref": "#/$defs/ifFigureNotSingle" }],
       "unevaluatedProperties": false
     },
@@ -158,12 +170,17 @@
     "ifAutoAimConstSpeed": {
       "$comment": "RotationTime for ConstSpeed type",
       "if": {
+        "type": "object",
         "properties": {
-          "type": { "const": "ConstSpeed" }
+          "type": {
+            "type": "string",
+            "const": "ConstSpeed"
+          }
         },
         "required": ["type"]
       },
       "then": {
+        "type": "object",
         "properties": {
           "rotationTime": {
             "type": "number",
@@ -178,12 +195,17 @@
     "ifAutoAimConstAccel": {
       "$comment": "Acceleration for ConstAccel type",
       "if": {
+        "type": "object",
         "properties": {
-          "type": { "const": "ConstAccel" }
+          "type": {
+            "type": "string",
+            "const": "ConstAccel"
+          }
         },
         "required": ["type"]
       },
       "then": {
+        "type": "object",
         "properties": {
           "acceleration": {
             "type": "integer",
@@ -198,12 +220,17 @@
     "ifAutoAimCursor": {
       "$comment": "Cursor radius for Cursor type",
       "if": {
+        "type": "object",
         "properties": {
-          "target": { "const": "Cursor" }
+          "target": {
+            "type": "string",
+            "const": "Cursor"
+          }
         },
         "required": ["target"]
       },
       "then": {
+        "type": "object",
         "properties": {
           "cursorAngle": {
             "type": "integer",
@@ -284,7 +311,10 @@
             "ApplyMultiCast",
             "DisableHoming",
             "DisableFollower",
-            "DisableEmitter"
+            "DisableEmitter",
+            "Placeatme",
+            "SendAnimEvent",
+            "Explode"
           ]
         },
         "on_followers": {
@@ -297,40 +327,50 @@
           "if": {
             "oneOf": [
               {
+                "type": "object",
                 "properties": {
                   "type": {
+                    "type": "string",
                     "const": "SetRotationHoming"
                   }
                 },
                 "required": ["type"]
               },
               {
+                "type": "object",
                 "properties": {
                   "type": {
+                    "type": "string",
                     "const": "ApplyMultiCast"
                   }
                 },
                 "required": ["type"]
               },
               {
+                "type": "object",
                 "properties": {
                   "type": {
+                    "type": "string",
                     "const": "SetHoming"
                   }
                 },
                 "required": ["type"]
               },
               {
+                "type": "object",
                 "properties": {
                   "type": {
+                    "type": "string",
                     "const": "SetEmitter"
                   }
                 },
                 "required": ["type"]
               },
               {
+                "type": "object",
                 "properties": {
                   "type": {
+                    "type": "string",
                     "const": "SetFollower"
                   }
                 },
@@ -339,6 +379,7 @@
             ]
           },
           "then": {
+            "type": "object",
             "properties": {
               "id": { "$ref": "#/$defs/form_key" }
             },
@@ -347,14 +388,17 @@
         },
         {
           "if": {
+            "type": "object",
             "properties": {
               "type": {
+                "type": "string",
                 "const": "DisableFollower"
               }
             },
             "required": ["type"]
           },
           "then": {
+            "type": "object",
             "properties": {
               "restore_speed": {
                 "type": "boolean",
@@ -365,18 +409,87 @@
         },
         {
           "if": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "Placeatme"
+              }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "form": {
+                "$ref": "#/$defs/FormOrID",
+                "description": "An object to spawn"
+              }
+            },
+            "required": ["form"]
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "Explode"
+              }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "explosion": {
+                "$ref": "#/$defs/FormOrID",
+                "description": "An explosion to explode"
+              }
+            },
+            "required": ["explosion"]
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "SendAnimEvent"
+              }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string"
+              }
+            },
+            "required": ["event"]
+          }
+        },
+        {
+          "if": {
             "oneOf": [
               {
+                "type": "object",
                 "properties": {
                   "type": {
+                    "type": "string",
                     "const": "ChangeSpeed"
                   }
                 },
                 "required": ["type"]
               },
               {
+                "type": "object",
                 "properties": {
                   "type": {
+                    "type": "string",
                     "const": "ChangeRange"
                   }
                 },
@@ -385,6 +498,7 @@
             ]
           },
           "then": {
+            "type": "object",
             "properties": {
               "data": { "$ref": "#/$defs/TriggerNumberFunctionsData" }
             },
@@ -419,7 +533,19 @@
       "properties": {
         "event": {
           "description": "An event that triggers this trigger",
-          "enum": ["ProjAppeared", "Swing", "HitMelee", "HitByMelee", "HitProjectile", "HitByProjectile", "Cast", "EffectStart", "EffectEnd", "ProjDestroyed", "ProjHits", "ProjImpact"]
+          "enum": [
+            "ProjAppeared",
+            "Swing",
+            "HitMelee",
+            "HitByMelee",
+            "HitProjectile",
+            "HitByProjectile",
+            "Cast",
+            "EffectStart",
+            "EffectEnd",
+            "ProjDestroyed",
+            "ProjImpact"
+          ]
         },
         "conditions": {
           "type": "object",
@@ -487,12 +613,14 @@
     "ifSpawnGroupToTarget": {
       "$comment": "RotationTarget for rotation is ToTarget",
       "if": {
+        "type": "object",
         "properties": {
-          "rotation": { "const": "ToTarget" }
+          "rotation": { "type": "string", "const": "ToTarget" }
         },
         "required": ["rotation"]
       },
       "then": {
+        "type": "object",
         "properties": {
           "rotationTarget": {
             "$ref": "#/$defs/form_key",
@@ -538,9 +666,7 @@
             }
           },
           "required": ["Pattern"],
-          "allOf": [
-            { "$ref": "#/$defs/ifSpawnGroupToTarget" }
-          ],
+          "allOf": [{ "$ref": "#/$defs/ifSpawnGroupToTarget" }],
           "unevaluatedProperties": false
         },
         "additionalProperties": false
@@ -548,18 +674,46 @@
     },
 
     "MulticastSpell": {
+      "properties": {
+        "spellID": {
+          "type": "string"
+        }
+      },
       "allOf": [
         { "required": ["spellID"] },
-        { "not": { "required": ["arrowID"] } },
-        { "not": { "required": ["weapID"] } }
+        {
+          "not": {
+            "type": "object",
+            "properties": { "arrowID": {} },
+            "required": ["arrowID"]
+          }
+        },
+        {
+          "not": {
+            "type": "object",
+            "properties": { "weapID": {} },
+            "required": ["weapID"]
+          }
+        }
       ],
       "description": "Data for spell projectile"
     },
     "MulticastArrow": {
       "description": "Data for spell projectile",
+      "properties": {
+        "weapID": {
+          "type": "string"
+        }
+      },
       "allOf": [
         { "required": ["weapID"] },
-        { "not": { "required": ["spellID"] } }
+        {
+          "not": {
+            "type": "object",
+            "properties": { "spellID": {} },
+            "required": ["spellID"]
+          }
+        }
       ]
     },
     "MulticastData": {
@@ -586,28 +740,28 @@
               "arrowID": {
                 "oneOf": [
                   { "$ref": "#/$defs/FormOrID" },
-                  { "const": "Current" }
+                  {
+                    "type": "string",
+                    "const": "Current"
+                  }
                 ],
                 "description": "An arrow to fire"
               },
               "weapID": {
                 "oneOf": [
                   { "$ref": "#/$defs/FormOrID" },
-                  { "const": "Current" }
+                  { "type": "string", "const": "Current" }
                 ],
                 "description": "A weap that fires"
               },
               "spellID": {
                 "oneOf": [
                   { "$ref": "#/$defs/FormOrID" },
-                  { "const": "Current" }
+                  { "type": "string", "const": "Current" }
                 ],
                 "description": "A spell to cast"
               }
             },
-            "allOf": [
-              
-            ],
             "oneOf": [
               { "$ref": "#/$defs/MulticastArrow" },
               { "$ref": "#/$defs/MulticastSpell" }
@@ -623,8 +777,9 @@
     "ifEmitterTriggerFunctions": {
       "$comment": "NewProjsType field for emitter",
       "if": {
+        "type": "object",
         "properties": {
-          "type": { "const": "TriggerFunctions" }
+          "type": { "type": "string", "const": "TriggerFunctions" }
         },
         "required": ["type"]
       },
@@ -638,12 +793,14 @@
     "ifEmitterAccelerateToMaxSpeed": {
       "$comment": "time field for emitter",
       "if": {
+        "type": "object",
         "properties": {
-          "type": { "const": "AccelerateToMaxSpeed" }
+          "type": { "type": "string", "const": "AccelerateToMaxSpeed" }
         },
         "required": ["type"]
       },
       "then": {
+        "type": "object",
         "properties": {
           "time": {
             "type": "number",
@@ -716,12 +873,14 @@
       "$comment": "size, count for shape of non Single",
       "if": {
         "not": {
+          "type": "object",
           "properties": {
-            "rounding": { "const": "None" }
+            "rounding": { "type": "string", "const": "None" }
           }
         }
       },
       "then": {
+        "type": "object",
         "properties": {
           "roundingR": {
             "description": "A radius of floating",
@@ -756,9 +915,7 @@
               "minimum": 0
             }
           },
-          "allOf": [
-            { "$ref": "#/$defs/ifFollowerRounding" }
-          ],
+          "allOf": [{ "$ref": "#/$defs/ifFollowerRounding" }],
           "unevaluatedProperties": false,
           "required": ["Pattern"]
         }

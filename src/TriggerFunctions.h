@@ -23,7 +23,11 @@ namespace TriggerFunctions
 			ApplyMultiCast,
 			DisableHoming,
 			DisableFollower,
-			DisableEmitter
+			DisableEmitter,
+			Placeatme,
+			SendAnimEvent,
+			Explode,
+			SetColLayer
 		};
 
 	private:
@@ -70,6 +74,9 @@ namespace TriggerFunctions
 			uint32_t ind;
 			NumberFunctionData numb;
 			bool restore_speed;
+			RE::TESForm* form;
+			RE::BSFixedString event;
+			RE::COL_LAYER layer;
 		};
 
 		void eval_SetRotationToSight(RE::Projectile* proj) const;
@@ -83,6 +90,10 @@ namespace TriggerFunctions
 		void eval_ChangeSpeed(RE::Projectile* proj) const;
 		void eval_ChangeRange(RE::Projectile* proj) const;
 		void eval_ApplyMultiCast(Triggers::Data* data) const;
+		void eval_Placeatme(Triggers::Data* data) const;
+		void eval_SendAnimEvent(Triggers::Data* data) const;
+		void eval_Explode(Triggers::Data* data) const;
+		void eval_SetColLayer(RE::Projectile* proj) const;
 
 		void eval_impl(Triggers::Data* data, RE::Projectile* proj, RE::Actor* targetOverride = nullptr) const;
 
@@ -91,8 +102,20 @@ namespace TriggerFunctions
 		uint32_t get_homing_ind(bool rotation) const;
 
 		Function() : type(Type::ChangeSpeed), numb() {}
-		explicit Function(const std::string& filename, const Json::Value& function);
+		Function(const std::string& filename, const Json::Value& function);
 		explicit Function(const RE::NiPoint3& linVel);  // For ChangeSpeed (triggers only on 3dLoaded)
+		Function(const Function& other);
+
+		~Function()
+		{
+			switch (type) {
+			case TriggerFunctions::Function::Type::SendAnimEvent:
+				event.~BSFixedString();
+				break;
+			default:
+				break;
+			}
+		}
 	};
 
 	struct Functions
