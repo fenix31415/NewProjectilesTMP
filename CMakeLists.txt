@@ -1,6 +1,9 @@
+option(WITH_IMGUI "Add ImGui support" OFF)
+option(WITH_DRAWING "Add Debug render support" ON)
+
 cmake_minimum_required(VERSION 3.21)
 
-set(VALIDATE ON)
+set(VALIDATE OFF)
 
 if (VALIDATE)
 	add_compile_definitions(VALIDATE)
@@ -77,18 +80,28 @@ if (DEFINED UseUselessUtils AND UseUselessUtils)
 	add_compile_definitions(USELESS_UTILS)
 endif ()
 
+if (WITH_IMGUI)
+	add_compile_definitions(WITH_IMGUI)
+endif ()
+if (WITH_DRAWING)
+	add_compile_definitions(WITH_DRAWING)
+endif ()
+
 
 # ---- Dependencies ----
 
 if (DEFINED UseUselessUtils AND UseUselessUtils)
-	add_subdirectory($ENV{UselessFenixUtils} ./UselessFenixUtils)
+	add_subdirectory($ENV{UselessFenixUtils} ./UselessFenixUtils/build)
 else ()
-	add_subdirectory($ENV{CommonLibSSE} ./CommonLibSSE)
+	add_subdirectory($ENV{CommonLibSSE} ./CommonLibSSE/build)
 endif ()
 
 find_package(spdlog REQUIRED CONFIG)
 find_package(jsoncpp REQUIRED CONFIG)
-find_package(imgui REQUIRED CONFIG)
+
+if (WITH_IMGUI)
+	find_package(imgui REQUIRED CONFIG)
+endif ()
 
 # ---- Add source files ----
 
@@ -170,6 +183,14 @@ target_link_libraries(
 		spdlog::spdlog
 		JsonCpp::JsonCpp
 )
+
+if (WITH_IMGUI)
+	target_link_libraries(
+		${PROJECT_NAME}
+		PRIVATE
+			imgui::imgui
+	)
+endif ()
 
 if (VALIDATE)
 	target_link_libraries(

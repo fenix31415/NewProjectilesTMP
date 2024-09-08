@@ -1,8 +1,8 @@
 extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a_skse, SKSE::PluginInfo* a_info)
 {
-//#ifndef DEBUG
-//	auto sink = std::make_shared<spdlog::sinks::msvc_sink_mt>();
-//#else
+#ifndef DEBUG
+	auto sink = std::make_shared<spdlog::sinks::msvc_sink_mt>();
+#else
 	auto path = logger::log_directory();
 	if (!path) {
 		return false;
@@ -11,12 +11,13 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 	*path /= Version::PROJECT;
 	*path += ".log"sv;
 	auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path->string(), true);
-//#endif
+#endif
 
 	auto log = std::make_shared<spdlog::logger>("global log"s, std::move(sink));
 
 #ifndef DEBUG
-	log->set_level(spdlog::level::trace);
+	log->set_level(spdlog::level::err);
+	log->flush_on(spdlog::level::err);
 #else
 	log->set_level(spdlog::level::info);
 	log->flush_on(spdlog::level::info);
@@ -45,6 +46,29 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 	return true;
 }
 
+#ifdef WITH_IMGUI
+namespace Gui
+{
+	namespace Impl
+	{
+		const uint32_t enable_hotkey = 199;  // home
+		const uint32_t hide_hotkey = 207;    // end
+
+		bool is_hide_hotkey(RE::ButtonEvent* b) { return b->GetIDCode() == hide_hotkey; }
+		bool is_enable_hotkey(RE::ButtonEvent* b) { return b->GetIDCode() == enable_hotkey; }
+
+		void show() { ImGui::ShowDemoWindow(); }
+	}
+
+	void init()
+	{
+		using ImGuiHelper = ImguiUtils::ImGuiHelper<Impl::show, Impl::is_hide_hotkey, Impl::is_enable_hotkey>;
+
+		ImGuiHelper::Initialize();
+	}
+}
+#endif  // WITH_IMGUI
+
 #include "Hooks.h"
 #include "json/json.h"
 #include <JsonUtils.h>
@@ -61,20 +85,32 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 
 void before_all()
 {
+	logger::info("before before_all");
+
+	logger::info("before Py_Initialize");
 	Py_Initialize();
+	logger::info("Py_Initialize OK");
+
+	logger::info("before import sys");
 	PyRun_SimpleString("import sys");
+	logger::info("before sys.path.append");
 	PyRun_SimpleString("sys.path.append(\"./Data/skse/plugins/\")");
+	logger::info("before_all OK");
 }
 
 void after_all()
 {
+	logger::info("before after_all");
 	if (Py_FinalizeEx() < 0) {
 		logger::error("Finalize error\n");
 	}
+	logger::info("after_all OK");
 }
 
 bool validate_folder(const std::string& path)
 {
+	logger::info("before validate_folder");
+
 	std::string schema = path + "/schema.json";
 
 	std::string ans;
@@ -143,6 +179,8 @@ bool validate_folder(const std::string& path)
 	Py_XDECREF(pFunc);
 	Py_DECREF(pModule);
 
+	logger::info("validate_folder OK");
+
 	return ans.empty();
 }
 #endif  // VALIDATE
@@ -151,7 +189,7 @@ void read_json()
 {
 #ifdef VALIDATE
 	before_all();
-	bool valid = validate_folder("Data/HomingProjectiles");
+	bool valid = validate_folder("./Data/HomingProjectiles");
 	after_all();
 
 	if (!valid) {
@@ -354,7 +392,9 @@ public:
 
 static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 {
-	//DebugRender::OnMessage(message);
+#ifdef WITH_DRAWING
+	DebugRenderUtils::OnMessage(message);
+#endif  // WITH_DRAWING
 
 	switch (message->type) {
 	case SKSE::MessagingInterface::kPostLoad:
@@ -373,6 +413,9 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 		InputHandler::GetSingleton()->enable();
 		Settings::load();
 
+#ifdef WITH_IMGUI
+		Gui::init();
+#endif  // WITH_IMGUI
 		break;
 	}
 }
@@ -390,7 +433,9 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* a_s
 	SKSE::Init(a_skse);
 	SKSE::AllocTrampoline(1 << 10);
 
-	//DebugRender::UpdateHooks::Hook();
+#ifdef WITH_DRAWING
+	DebugRenderUtils::UpdateHooks::Hook();
+#endif  // WITH_DRAWING
 
 	g_messaging->RegisterListener("SKSE", SKSEMessageHandler);
 

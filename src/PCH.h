@@ -9,11 +9,11 @@
 #pragma warning(pop)
 
 #pragma warning(push)
-//#ifdef DEBUG
+#ifdef DEBUG
 #	include <spdlog/sinks/basic_file_sink.h>
-//#else
-//#	include <spdlog/sinks/msvc_sink.h>
-//#endif
+#else
+#	include <spdlog/sinks/msvc_sink.h>
+#endif
 #pragma warning(pop)
 
 using namespace std::literals;

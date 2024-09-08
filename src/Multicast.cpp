@@ -481,7 +481,7 @@ namespace Multicast
 				if (auto proj = handle.get().get()) {
 					if (proj->power > 0) {
 						proj->weaponDamage /= proj->power;
-						proj->power = 0.75f;
+						proj->power = 1.0f;
 						proj->weaponDamage *= proj->power;
 					}
 
