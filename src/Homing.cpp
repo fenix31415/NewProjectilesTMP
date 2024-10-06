@@ -250,8 +250,22 @@ namespace Homing
 
 				RE::TES::GetSingleton()->ForEachReference([=, &targets](RE::TESObjectREFR& _refr) {
 					if (filter_target_cursor(_refr, caster, hostile_filter, check_los, angle, within_dist2)) {
+						auto caster_pos =
+							FenixUtils::Geom::Actor::CalculateLOSLocation(caster, FenixUtils::LineOfSightLocation::kHead);
+						auto target_pos =
+							FenixUtils::Geom::Actor::CalculateLOSLocation(&_refr, FenixUtils::LineOfSightLocation::kTorso);
+
+						auto caster_sight = caster_pos;
+						caster_sight += FenixUtils::Geom::angles2dir(caster->data.angle);
+
+						auto AB1 = caster_sight - caster_pos;
+						auto AB2 = target_pos - caster_pos;
+						AB1.Unitize();
+						AB2.Unitize();
+
 						targets.push_back(
-							{ _refr.As<RE::Actor>(), caster->GetPosition().GetSquaredDistance(_refr.GetPosition()) });
+							//{ _refr.As<RE::Actor>(), caster->GetPosition().GetSquaredDistance(_refr.GetPosition()) });
+							{ _refr.As<RE::Actor>(), abs(acos(AB1.Dot(AB2))) });
 					}
 					return RE::BSContainer::ForEachResult::kContinue;
 				});

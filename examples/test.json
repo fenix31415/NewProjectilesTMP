@@ -1,0 +1,108 @@
+{
+  "FormIDs": {
+    "key_spellIceSpike": "Skeletons.esp|0x23950",
+    "key_spellPowerofIce": "Skeletons.esp|0x238FB",
+    "key_BossJurik": "Skyrim.esm|0x1BB28"
+  },
+  "HomingData": {
+    "key_H_1": {
+      "aggressive": "Any",
+      "type": "ConstSpeed",
+      "rotationTime": 1
+    }
+  },
+
+  "FollowersData": {
+    "key_F_1": {
+      "Pattern": {
+        "Figure": {
+          "shape": "Circle",
+          "count": 1,
+          "size": 50
+        },
+        "normal": [0, 0, 1],
+        "xDepends": false,
+        "posOffset": [0, 0, 150]
+      },
+      "collision": "None"
+    }
+  },
+
+  "MulticastSpawnGroups": {
+    "key_SP_1": {
+      "Pattern": {
+        "Figure": {
+          "count": 1,
+          "shape": "Single"
+        }
+      }
+    }
+  },
+
+  "MulticastData": {
+    "key_MC_1": [
+      {
+        "spellID": "key_spellIceSpike",
+        "spawn_group": "key_SP_1",
+        "TriggerFunctions": {
+          "functions": [
+            {
+              "type": "SetFollower",
+              "id": "key_F_1"
+            }
+          ]
+        }
+      }
+    ]
+  },
+
+  "Triggers": [
+    {
+      "event": "EffectStart",
+      "conditions": {
+        "SpellIsFormID": "key_spellPowerofIce"
+      },
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "ApplyMultiCast",
+            "id": "key_MC_1"
+          }
+        ]
+      }
+    },
+    {
+      "event": "HitByProjectile",
+      "conditions": {
+        "CasterBaseIsFormID": "key_BossJurik"
+      },
+      "TriggerFunctions": {
+        "functions": [
+          {
+            "type": "SetRotationHoming",
+            "id": "key_H_1",
+            "on_followers": true
+          },
+          {
+            "type": "SetHoming",
+            "id": "key_H_1",
+            "on_followers": true
+          },
+          {
+            "type": "ChangeSpeed",
+            "data": {
+              "type": "Mul",
+              "value": 0.9
+            },
+            "on_followers": true
+          },
+          {
+            "type": "DisableFollower",
+            "on_followers": true,
+            "restore_speed": true
+          }
+        ]
+      }
+    }
+  ]
+}
