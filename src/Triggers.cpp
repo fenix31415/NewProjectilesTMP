@@ -13,7 +13,7 @@ namespace Triggers
 			Right
 		};
 
-		enum class Type
+		enum class Type : uint32_t
 		{
 			Hand,
 			ProjBaseIsFormID,
@@ -28,7 +28,11 @@ namespace Triggers
 			CasterHasKwd,
 			WeaponBaseIsFormID,
 			WeaponHasKwd
-		} type;
+		};
+
+		Type type: 30;
+		uint32_t invert: 1;
+		uint32_t OR: 1;
 
 		union
 		{
@@ -89,8 +93,8 @@ namespace Triggers
 		bool eval_WeaponHasKwd(RE::TESObjectWEAP* weap) const { return weap && weap->HasKeywordID(formid); }
 
 	public:
-		Condition(const std::string& filename, const std::string& type_name, const Json::Value& val) :
-			type(JsonUtils::string2enum<Type>(type_name))
+		Condition(const std::string& filename, const Json::Value& json_condition) :
+			type(JsonUtils::string2enum<Type>(JsonUtils::getString(json_condition, "type")))
 		{
 			switch (type) {
 				break;
@@ -106,15 +110,18 @@ namespace Triggers
 			case Type::CasterHasKwd:
 			case Type::WeaponBaseIsFormID:
 			case Type::WeaponHasKwd:
-				formid = JsonUtils::get_formid(filename, val.asString());
+				formid = JsonUtils::get_formid(filename, JsonUtils::getString(json_condition, "formID"));
 				break;
 			case Type::Hand:
-				hand = JsonUtils::read_enum<Hand>(val.asString());
+				hand = JsonUtils::read_enum<Hand>(json_condition, "hand");
 				break;
 			default:
 				assert(false);
 				break;
 			}
+
+			invert = JsonUtils::mb_getBool(json_condition, "invert");
+			OR = JsonUtils::mb_getBool(json_condition, "OR");
 		}
 
 		bool eval(Data* data) const
@@ -165,13 +172,21 @@ namespace Triggers
 			functions.call(data, proj, targetOverride);
 		}
 
+		// state x val x OR
+		static inline int transitions[4][2][2] = { { { 3, 1 }, { 0, 2 } }, { { 3, 1 }, { 0, 2 } }, { { 0, 2 }, { 0, 2 } },
+			{ { 3, 3 }, { 3, 3 } } };
+
 		bool call_conditions(Data* data) const
 		{
+			uint32_t state = 0;
+
+			if (conditions.empty())
+				return false;
+
 			for (const auto& cond : conditions) {
-				if (!cond.eval(data))
-					return false;
+				state = transitions[state][cond.eval(data) != static_cast<bool>(cond.invert)][cond.OR];
 			}
-			return true;
+			return state == 0 || state == 2;
 		}
 
 	public:
@@ -180,8 +195,10 @@ namespace Triggers
 		{
 			if (json_trigger.isMember("conditions")) {
 				auto& json_conditions = json_trigger["conditions"];
-				for (const auto& condition : json_conditions.getMemberNames()) {
-					conditions.emplace_back(filename, condition, json_conditions[condition]);
+				for (size_t i = 0; i < json_conditions.size(); i++) {
+					const auto& condition = json_conditions[(int)i];
+
+					conditions.emplace_back(filename, condition);
 				}
 			}
 		}

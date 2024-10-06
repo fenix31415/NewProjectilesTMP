@@ -314,7 +314,8 @@
             "DisableEmitter",
             "Placeatme",
             "SendAnimEvent",
-            "Explode"
+            "Explode",
+            "SetColLayer"
           ]
         },
         "on_followers": {
@@ -457,6 +458,29 @@
             "properties": {
               "type": {
                 "type": "string",
+                "const": "SetColLayer"
+              }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "layer": {
+                "type": "string",
+                "description": "A layer to set",
+                "enum": ["Actor", "Spell", "None"]
+              }
+            },
+            "required": ["layer"]
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "const": "SendAnimEvent"
               }
             },
@@ -548,55 +572,285 @@
           ]
         },
         "conditions": {
-          "type": "object",
+          "type": "array",
           "description": "An array of conditions",
-          "properties": {
-            "Hand": {
-              "enum": ["Both", "Left", "Right"],
-              "description": "Hand same as given (default: Both)"
+          "items": {
+            "description": "A condition entry",
+            "type": "object",
+            "properties": {
+              "type": {
+                "description": "Condition name",
+                "enum": [
+                  "Hand",
+                  "ProjBaseIsFormID",
+                  "EffectHasKwd",
+                  "EffectsIsFormID",
+                  "SpellHasKwd",
+                  "SpellIsFormID",
+                  "CasterIsFormID",
+                  "CasterBaseIsFormID",
+                  "CasterHasKwd",
+                  "WeaponBaseIsFormID",
+                  "WeaponHasKwd"
+                ]
+              },
+              "invert": {
+                "description": "whether to invert this condition when evaluating (default: false)",
+                "type": "boolean"
+              },
+              "OR": {
+                "description": "same as CK's OR flag (default: false)",
+                "type": "boolean"
+              }
             },
-            "ProjBaseIsFormID": {
-              "$ref": "#/$defs/FormOrID",
-              "description": "Base projectile has given formID"
-            },
-            "EffectHasKwd": {
-              "$ref": "#/$defs/FormOrID",
-              "description": "Effect has given keyword"
-            },
-            "EffectsIsFormID": {
-              "$ref": "#/$defs/FormOrID",
-              "description": "Effect has given formID"
-            },
-            "SpellHasKwd": {
-              "$ref": "#/$defs/FormOrID",
-              "description": "Spell has given keyword"
-            },
-            "SpellIsFormID": {
-              "$ref": "#/$defs/FormOrID",
-              "description": "Spell has given formID"
-            },
-            "CasterIsFormID": {
-              "$ref": "#/$defs/FormOrID",
-              "description": "Actor has given formID"
-            },
-            "CasterBaseIsFormID": {
-              "$ref": "#/$defs/FormOrID",
-              "description": "Actor base has given formID"
-            },
-            "CasterHasKwd": {
-              "$ref": "#/$defs/FormOrID",
-              "description": "Actor has given keyword"
-            },
-            "WeaponBaseIsFormID": {
-              "$ref": "#/$defs/FormOrID",
-              "description": "Weapon base has given formID"
-            },
-            "WeaponHasKwd": {
-              "$ref": "#/$defs/FormOrID",
-              "description": "Weapon has given keyword"
-            }
-          },
-          "additionalProperties": false
+            "required": [ "type" ],
+            "allOf": [
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "Hand"
+                    }
+                  },
+                  "required": ["type"]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "hand": {
+                      "enum": ["Both", "Left", "Right"],
+                      "description": "Hand same as this"
+                    }
+                  },
+                  "required": ["hand"]
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "ProjBaseIsFormID"
+                    }
+                  },
+                  "required": ["type"]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "formID": {
+                      "$ref": "#/$defs/FormOrID",
+                      "description": "Base projectile has this formID"
+                    }
+                  },
+                  "required": ["formID"]
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "EffectHasKwd"
+                    }
+                  },
+                  "required": ["type"]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "formID": {
+                      "$ref": "#/$defs/FormOrID",
+                      "description": "Effect has this keyword"
+                    }
+                  },
+                  "required": ["formID"]
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "EffectsIsFormID"
+                    }
+                  },
+                  "required": ["type"]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "formID": {
+                      "$ref": "#/$defs/FormOrID",
+                      "description": "Effect has this formID"
+                    }
+                  },
+                  "required": ["formID"]
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "SpellHasKwd"
+                    }
+                  },
+                  "required": ["type"]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "formID": {
+                      "$ref": "#/$defs/FormOrID",
+                      "description": "Spell has a keyword with this formID"
+                    }
+                  },
+                  "required": ["formID"]
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "SpellIsFormID"
+                    }
+                  },
+                  "required": ["type"]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "formID": {
+                      "$ref": "#/$defs/FormOrID",
+                      "description": "Spell has given formID"
+                    }
+                  },
+                  "required": ["formID"]
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "CasterIsFormID"
+                    }
+                  },
+                  "required": ["type"]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "formID": {
+                      "$ref": "#/$defs/FormOrID",
+                      "description": "Actor has this formID"
+                    }
+                  },
+                  "required": ["formID"]
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "CasterBaseIsFormID"
+                    }
+                  },
+                  "required": ["type"]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "formID": {
+                      "$ref": "#/$defs/FormOrID",
+                      "description": "Actor base has this formID"
+                    }
+                  },
+                  "required": ["formID"]
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "CasterHasKwd"
+                    }
+                  },
+                  "required": ["type"]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "formID": {
+                      "$ref": "#/$defs/FormOrID",
+                      "description": "Actor has a keyword with this formID"
+                    }
+                  },
+                  "required": ["formID"]
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "WeaponBaseIsFormID"
+                    }
+                  },
+                  "required": ["type"]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "formID": {
+                      "$ref": "#/$defs/FormOrID",
+                      "description": "Weapon base has this formID"
+                    }
+                  },
+                  "required": ["formID"]
+                }
+              },
+              {
+                "if": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "WeaponHasKwd"
+                    }
+                  },
+                  "required": ["type"]
+                },
+                "then": {
+                  "type": "object",
+                  "properties": {
+                    "formID": {
+                      "$ref": "#/$defs/FormOrID",
+                      "description": "Weapon has a keyword with this formID"
+                    }
+                  },
+                  "required": ["formID"]
+                }
+              }
+            ],
+            "unevaluatedProperties": false
+          }
+          
         },
         "TriggerFunctions": { "$ref": "#/$defs/TriggerFunctions" }
       },
